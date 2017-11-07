@@ -26,14 +26,14 @@ import akka.http.scaladsl.server._
 import edp.rider.common.RiderLogger
 import edp.rider.rest.persistence.dal.StreamDal
 import edp.rider.rest.persistence.entities._
-import edp.rider.rest.router.{ResponseJson, ResponseSeqJson, SessionClass}
+import edp.rider.rest.router.{JsonSerializer, ResponseJson, ResponseSeqJson, SessionClass}
 import edp.rider.rest.util.AuthorizationProvider
 import edp.rider.rest.util.ResponseUtils._
 import edp.rider.spark.SparkJobClientLog
-import edp.rider.rest.router.JsonProtocol._
+
 import scala.util.{Failure, Success}
 
-class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) with RiderLogger {
+class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) with RiderLogger with JsonSerializer {
   override def getByAllRoute(route: String): Route = path(route) {
     get {
       parameter('visible.as[Boolean].?) {
@@ -42,18 +42,12 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
             session =>
               if (session.roleType != "admin") {
                 riderLogger.warn(s"${session.userId} has no permission to access it.")
-                complete(Forbidden, getHeader(403, session))
+                complete(OK, getHeader(403, session))
               }
               else {
-                onComplete(streamDal.adminGetAll.mapTo[Seq[StreamAdmin]]) {
-                  case Success(streamAdmins) =>
-                    riderLogger.info(s"stream admin response data size: ${streamAdmins.size}")
-                    riderLogger.info(s"user ${session.userId} select all $route success.")
-                    complete(OK, ResponseSeqJson[StreamAdmin](getHeader(200, session), streamAdmins.sortBy(_.stream.id)))
-                  case Failure(ex) =>
-                    riderLogger.error(s"user ${session.userId} select all $route failed", ex)
-                    complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
-                }
+                val streams = streamDal.getStreamDetail()
+                riderLogger.info(s"user ${session.userId} select all streams success.")
+                complete(OK, ResponseSeqJson[StreamDetail](getHeader(200, session), streams))
               }
           }
       }
@@ -69,26 +63,16 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
           session =>
             if (session.roleType != "admin") {
               riderLogger.warn(s"${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, session))
+              complete(OK, getHeader(403, session))
             }
             else {
-              returnStreamRes(id, None, session)
+              val streams = streamDal.getStreamDetail(Some(id))
+              riderLogger.info(s"user ${session.userId} select all streams success.")
+              complete(OK, ResponseSeqJson[StreamDetail](getHeader(200, session), streams))
             }
         }
       }
 
-  }
-
-  def returnStreamRes(projectId: Long, streamId: Option[Long], session: SessionClass) = {
-    onComplete(streamDal.getStreamsByProjectId(Some(projectId), streamId).mapTo[Seq[StreamSeqTopic]]) {
-      case Success(streams) =>
-        val allStreams: Seq[(Stream, StreamSeqTopic)] = streamDal.getUpdateStream(streams)
-        val realReturns = allStreams.map(stream => stream._2)
-        val realRes = realReturns.map(returnStream => streamDal.getReturnRes(returnStream))
-        riderLogger.info(s"user ${session.userId} updated streams after refresh the yarn/spark rest api or log success.")
-        complete(OK, ResponseSeqJson[StreamSeqTopicActions](getHeader(200, session), realRes.sortBy(_.stream.id)))
-      case Failure(ex) => complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
-    }
   }
 
   def getResourceByProjectIdRoute(route: String): Route = path(route / LongNumber / "resources") {
@@ -98,7 +82,7 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
           session =>
             if (session.roleType != "admin") {
               riderLogger.warn(s"${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, session))
+              complete(OK, getHeader(403, session))
             }
             else {
               onComplete(streamDal.getResource(id).mapTo[Resource]) {
@@ -107,7 +91,7 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
                   complete(OK, ResponseJson[Resource](getHeader(200, session), resources))
                 case Failure(ex) =>
                   riderLogger.error(s"user ${session.userId} select all resources failed where project id is $id", ex)
-                  complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                  complete(OK, getHeader(451, ex.getMessage, session))
               }
             }
         }
@@ -121,7 +105,7 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
           session =>
             if (session.roleType != "admin") {
               riderLogger.warn(s"${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, session))
+              complete(OK, getHeader(403, session))
             }
             else {
               onComplete(streamDal.getStreamNameByStreamID(streamId).mapTo[Stream]) {
@@ -131,10 +115,11 @@ class StreamAdminApi(streamDal: StreamDal) extends BaseAdminApiImpl(streamDal) w
                   complete(OK, ResponseJson[String](getHeader(200, session), log))
                 case Failure(ex) =>
                   riderLogger.error(s"user ${session.userId} refresh stream log where stream id is $streamId failed", ex)
-                  complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                  complete(OK, getHeader(451, ex.getMessage, session))
               }
             }
         }
       }
   }
+
 }

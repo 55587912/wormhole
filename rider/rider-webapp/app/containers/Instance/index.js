@@ -35,8 +35,8 @@ import Popover from 'antd/lib/popover'
 import DatePicker from 'antd/lib/date-picker'
 const { RangePicker } = DatePicker
 
-import { loadInstances, addInstance, loadInstanceInputValue, loadSingleInstance, editInstance } from './action'
-import { selectInstances, selectError, selectModalLoading } from './selectors'
+import { loadInstances, addInstance, loadInstanceInputValue, loadInstanceExit, loadSingleInstance, editInstance } from './action'
+import { selectInstances, selectError, selectModalLoading, selectConnectUrlExisted, selectInstanceExisted } from './selectors'
 
 export class Instance extends React.PureComponent {
   constructor (props) {
@@ -67,9 +67,8 @@ export class Instance extends React.PureComponent {
       updateEndTimeText: '',
       filterDropdownVisibleUpdateTime: false,
 
-      instanceTargetValue: '',
       editInstanceData: {},
-
+      eidtConnUrl: '',
       InstanceSourceDsVal: ''
     }
   }
@@ -119,9 +118,9 @@ export class Instance extends React.PureComponent {
       this.setState({
         formVisible: true,
         instanceFormType: 'edit',
+        eidtConnUrl: result.connUrl,
         editInstanceData: {
           active: result.active,
-          connUrl: result.connUrl,
           createBy: result.createBy,
           createTime: result.createTime,
           id: result.id,
@@ -149,15 +148,30 @@ export class Instance extends React.PureComponent {
   }
 
   onModalOk = () => {
+    const { instanceFormType } = this.state
+    const { instanceExisted } = this.props
+
     this.instanceForm.validateFieldsAndScroll((err, values) => {
       if (!err) {
-        if (this.state.instanceFormType === 'add') {
-          this.props.onAddInstance(values, () => {
-            this.hideForm()
-            message.success('Instance 添加成功！', 3)
-          })
-        } else if (this.state.instanceFormType === 'edit') {
-          this.props.onEditInstance(Object.assign({}, this.state.editInstanceData, {desc: values.description}), () => {
+        if (instanceFormType === 'add') {
+          if (instanceExisted === true) {
+            this.instanceForm.setFields({
+              instance: {
+                value: values.instance,
+                errors: [new Error('该 Instance 已存在')]
+              }
+            })
+          } else {
+            this.props.onAddInstance(values, () => {
+              this.hideForm()
+              message.success('Instance 添加成功！', 3)
+            })
+          }
+        } else if (instanceFormType === 'edit') {
+          this.props.onEditInstance(Object.assign({}, this.state.editInstanceData, {
+            desc: values.description,
+            connUrl: values.connectionUrl
+          }), () => {
             this.hideForm()
             message.success('Instance 修改成功！', 3)
           })
@@ -213,40 +227,72 @@ export class Instance extends React.PureComponent {
   }
 
   /***
-   * 新增时，通过Connection Url 自动显示Instance的值
+   * 新增时，验证 Connection Url 是否存在
    * */
   onInitInstanceInputValue = (value) => {
-    if (value === '') {
-      this.instanceForm.setFieldsValue({
-        instance: ''
-      })
-    } else {
+    const { eidtConnUrl } = this.state
+
+    if (eidtConnUrl !== value) {
       const requestVal = {
         type: this.state.InstanceSourceDsVal,
         conn_url: value
       }
 
-      this.props.onLoadInstanceInputValue(requestVal, (result) => {
-        if (this.instanceForm.getFieldValue('connectionUrl')) {
-          this.instanceForm.setFieldsValue({
-            instance: result
-          })
-        }
-      }, (result) => {
-        const errMsg = result.indexOf('exists') > 0
-          ? '该 Connection URL 已存在'
-          : '必须是 "ip:port" 或 "hostname:port" 格式'
-        this.instanceForm.setFields({
-          connectionUrl: {
-            value: value,
-            errors: [new Error(`${errMsg}`)]
-          },
-          instance: {
-            value: ''
-          }
-        })
+      this.props.onLoadInstanceInputValue(requestVal, () => {}, (result) => {
+        this.loadResult(value, result)
       })
     }
+  }
+
+  loadResult (value, result) {
+    const { instanceFormType, InstanceSourceDsVal } = this.state
+    let errMsg = ''
+    if (result.indexOf('exists') > 0) {
+      errMsg = `该 Connection URL 已存在，确定${instanceFormType === 'add' ? '新建' : '修改'}吗？`
+    } else {
+      // errMsg = this.state.InstanceSourceDsVal === 'es'
+      //   ? '必须是 "http(s)://ip:port"或"http(s)://hostname:port" 格式'
+      //   : '必须是 "ip:port"或"hostname:port" 格式, 多条时用逗号隔开'
+      if (InstanceSourceDsVal === 'es') {
+        errMsg = [new Error('http(s)://ip:port 格式')]
+      } else if (InstanceSourceDsVal === 'oracle' || InstanceSourceDsVal === 'mysql' || InstanceSourceDsVal === 'postgresql' || InstanceSourceDsVal === 'cassandra' || InstanceSourceDsVal === 'mongodb') {
+        errMsg = [new Error('ip:port 格式')]
+      } else if (InstanceSourceDsVal === 'hbase') {
+        errMsg = [new Error('zookeeper url list, 如localhost:2181/hbase, 多条用逗号隔开')]
+      } else if (InstanceSourceDsVal === 'phoenix') {
+        errMsg = [new Error('zookeeper url, 如localhost:2181')]
+      } else if (InstanceSourceDsVal === 'kafka') {
+        errMsg = [new Error('borker list, localhost:9092, 多条用逗号隔开')]
+      }
+      // else if (InstanceSourceDsVal === 'log') {
+      //   errMsg = ''
+      // }
+    }
+
+    this.instanceForm.setFields({
+      connectionUrl: {
+        value: value,
+        errors: errMsg
+      }
+    })
+  }
+
+  /***
+   * 新增时，验证 Instance 是否存在
+   * */
+  onInitInstanceExited = (value) => {
+    const requestVal = {
+      type: this.state.InstanceSourceDsVal,
+      nsInstance: value
+    }
+    this.props.onLoadInstanceExit(requestVal, () => {}, (result) => {
+      this.instanceForm.setFields({
+        instance: {
+          value: value,
+          errors: [new Error('该 Instance 已存在')]
+        }
+      })
+    })
   }
 
   handleEndOpenChange = (status) => {
@@ -320,8 +366,10 @@ export class Instance extends React.PureComponent {
           {text: 'hbase', value: 'hbase'},
           {text: 'phoenix', value: 'phoenix'},
           {text: 'cassandra', value: 'cassandra'},
-          {text: 'log', value: 'log'},
-          {text: 'kafka', value: 'kafka'}
+          // {text: 'log', value: 'log'},
+          {text: 'kafka', value: 'kafka'},
+          {text: 'postgresql', value: 'postgresql'},
+          {text: 'mongodb', value: 'mongodb'}
         ],
         filteredValue: filteredInfo.nsSys,
         onFilter: (value, record) => record.nsSys.includes(value)
@@ -340,6 +388,7 @@ export class Instance extends React.PureComponent {
         filterDropdown: (
           <div className="custom-filter-dropdown">
             <Input
+              ref={ele => { this.searchInput = ele }}
               placeholder="Instance"
               value={this.state.searchTextInstance}
               onChange={this.onInputChange('searchTextInstance')}
@@ -349,7 +398,9 @@ export class Instance extends React.PureComponent {
           </div>
         ),
         filterDropdownVisible: this.state.filterDropdownVisibleInstance,
-        onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleInstance: visible })
+        onFilterDropdownVisibleChange: visible => this.setState({
+          filterDropdownVisibleInstance: visible
+        }, () => this.searchInput.focus())
       }, {
         title: 'Connection URL',
         dataIndex: 'connUrl',
@@ -365,6 +416,7 @@ export class Instance extends React.PureComponent {
         filterDropdown: (
           <div className="custom-filter-dropdown">
             <Input
+              ref={ele => { this.searchInput = ele }}
               placeholder="URL"
               value={this.state.searchTextConnUrl}
               onChange={this.onInputChange('searchTextConnUrl')}
@@ -374,7 +426,9 @@ export class Instance extends React.PureComponent {
           </div>
         ),
         filterDropdownVisible: this.state.filterDropdownVisibleConnUrl,
-        onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleConnUrl: visible })
+        onFilterDropdownVisibleChange: visible => this.setState({
+          filterDropdownVisibleConnUrl: visible
+        }, () => this.searchInput.focus())
       }, {
         title: 'Create Time',
         dataIndex: 'createTime',
@@ -442,7 +496,6 @@ export class Instance extends React.PureComponent {
       }, {
         title: 'Action',
         key: 'action',
-        width: 100,
         className: 'text-align-center',
         render: (text, record) => (
           <span className="ant-table-action-column">
@@ -532,6 +585,7 @@ export class Instance extends React.PureComponent {
           <InstanceForm
             instanceFormType={instanceFormType}
             onInitInstanceInputValue={this.onInitInstanceInputValue}
+            onInitInstanceExited={this.onInitInstanceExited}
             onInitInstanceSourceDs={this.onInitInstanceSourceDs}
             ref={(f) => { this.instanceForm = f }}
           />
@@ -543,9 +597,11 @@ export class Instance extends React.PureComponent {
 
 Instance.propTypes = {
   modalLoading: React.PropTypes.bool,
+  instanceExisted: React.PropTypes.bool,
   onLoadInstances: React.PropTypes.func,
   onAddInstance: React.PropTypes.func,
   onLoadInstanceInputValue: React.PropTypes.func,
+  onLoadInstanceExit: React.PropTypes.func,
   onLoadSingleInstance: React.PropTypes.func,
   onEditInstance: React.PropTypes.func
 }
@@ -555,6 +611,7 @@ export function mapDispatchToProps (dispatch) {
     onLoadInstances: (resolve) => dispatch(loadInstances(resolve)),
     onAddInstance: (instance, resolve) => dispatch(addInstance(instance, resolve)),
     onLoadInstanceInputValue: (value, resolve, reject) => dispatch(loadInstanceInputValue(value, resolve, reject)),
+    onLoadInstanceExit: (value, resolve, reject) => dispatch(loadInstanceExit(value, resolve, reject)),
     onLoadSingleInstance: (instanceId, resolve) => dispatch(loadSingleInstance(instanceId, resolve)),
     onEditInstance: (value, resolve) => dispatch(editInstance(value, resolve))
   }
@@ -563,7 +620,9 @@ export function mapDispatchToProps (dispatch) {
 const mapStateToProps = createStructuredSelector({
   instances: selectInstances(),
   error: selectError(),
-  modalLoading: selectModalLoading()
+  modalLoading: selectModalLoading(),
+  connectUrlExisted: selectConnectUrlExisted(),
+  instanceExisted: selectInstanceExisted()
 })
 
 export default connect(mapStateToProps, mapDispatchToProps)(Instance)

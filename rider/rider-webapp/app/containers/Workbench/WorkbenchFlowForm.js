@@ -47,37 +47,18 @@ export class WorkbenchFlowForm extends React.Component {
   constructor (props) {
     super(props)
     this.state = {
-      sourceNamespaceHierarchy: [],
-      sinkNamespaceHierarchy: [],
-      transformNamespaceHierarchy: [],
-      streamFilter: [],
       flowMode: '',
-
-      etpStrategyColor: '',
-      configIcon: 'minus-circle-o',
-      sinkConfigModalVisible: false,
-      etpStrategyModalVisible: false,
-      transformModalVisible: false
+      sinkConfigClass: ''
     }
   }
 
   componentWillReceiveProps (props) {
-    this.setState({
-      flowMode: props.flowMode
-    })
+    this.setState({ flowMode: props.flowMode })
   }
 
-  onSelectProtocol = (e) => {
-    // console.log('e-protocol', e.target.value)
-  }
+  onAllOrNotSelect = (e) => this.props.initResultFieldClass(e)
 
-  onAllOrNotSelect = (e) => {
-    this.props.initResultFieldClass(e)
-  }
-
-  onShowDataFrame = (e) => {
-    this.props.initDataShowClass(e)
-  }
+  onShowDataFrame = (e) => this.props.initDataShowClass(e)
 
   forceCheckDataframeNum = (rule, value, callback) => {
     const reg = /^[0-9]+$/
@@ -90,10 +71,11 @@ export class WorkbenchFlowForm extends React.Component {
 
   // 通过不同的 Source Data System 显示不同的 Source Namespace 的内容
   onSourceDataSystemItemSelect = (val) => {
-    if (this.props.streamDiffType === 'default') {
+    const { streamDiffType, flowMode } = this.props
+
+    if (streamDiffType === 'default') {
       this.props.onInitSourceTypeNamespace(this.props.projectIdGeted, val, 'sourceType')
-    } else if (this.props.streamDiffType === 'hdfslog') {
-      const { flowMode } = this.props
+    } else if (streamDiffType === 'hdfslog') {
       // placeholder 和单条数据回显
       if (flowMode === 'add' || flowMode === 'copy') {
         this.props.form.setFieldsValue({
@@ -107,32 +89,27 @@ export class WorkbenchFlowForm extends React.Component {
   // 通过不同的 Sink Data System 显示不同的 Sink Namespace 的内容
   onSinkDataSystemItemSelect = (val) => {
     this.props.onInitSinkTypeNamespace(this.props.projectIdGeted, val, 'sinkType')
+    this.setState({
+      sinkConfigClass: (val === 'hbase' || val === 'mysql' || val === 'oracle' || val === 'postgresql') ? 'sink-config-class' : ''
+    })
   }
 
-  onStreamJoinSqlConfigTypeSelect = (val) => {
-    this.props.onStreamJoinSqlConfigTypeSelect(val)
-  }
+  onStreamJoinSqlConfigTypeSelect = (val) => this.props.onStreamJoinSqlConfigTypeSelect(val)
 
-  onHandleChangeStreamType = (e) => {
-    this.props.onInitStreamTypeSelect(e.target.value)
-  }
+  onHandleChangeStreamType = (e) => this.props.onInitStreamTypeSelect(e.target.value)
 
-  onHandleChangeStreamName = (val) => {
-    this.props.onInitStreamNameSelect(val)
-  }
+  onHandleChangeStreamName = (val) => this.props.onInitStreamNameSelect(val)
 
-  onHandleHdfslogCascader = (value) => {
-    this.props.initialHdfslogCascader(value)
-  }
+  onHandleHdfslogCascader = (value) => this.props.initialHdfslogCascader(value)
 
   render () {
-    const { step, form, fieldSelected, dataframeShowSelected, streamDiffType, hdfslogSinkDataSysValue, hdfslogSinkNsValue, transformTableConfirmValue } = this.props
+    const { step, form, fieldSelected, dataframeShowSelected, streamDiffType, hdfslogSinkDataSysValue, hdfslogSinkNsValue, transformTableConfirmValue, flowKafkaTopicValue } = this.props
     const { getFieldDecorator } = form
     const { onShowTransformModal, onShowEtpStrategyModal, onShowSinkConfigModal } = this.props
     const { transformTableSource, onDeleteSingleTransform, onAddTransform, onEditTransform, onUpTransform, onDownTransform } = this.props
     const { step2SourceNamespace, step2SinkNamespace, etpStrategyCheck, transformTagClassName, transformTableClassName, transConnectClass } = this.props
     const { selectStreamKafkaTopicValue, sourceTypeNamespaceData, hdfslogNsData, sinkTypeNamespaceData } = this.props
-    const { flowMode } = this.state
+    const { flowMode, sinkConfigClass } = this.state
 
     // edit 时，不能修改部分元素
     let flowDisabledOrNot = false
@@ -171,20 +148,20 @@ export class WorkbenchFlowForm extends React.Component {
 
     const itemStyleDFS = {
       labelCol: { span: 9 },
-      wrapperCol: { span: 10 }
-    }
-
-    const itemStyleDFSN = {
-      labelCol: { span: 12 },
       wrapperCol: { span: 9 }
     }
 
+    const itemStyleDFSN = {
+      labelCol: { span: 14 },
+      wrapperCol: { span: 10 }
+    }
+
     const sourceDataSystemData = [
+      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} },
       { value: 'log', text: 'Log' },
       { value: 'file', text: 'File' },
       { value: 'app', text: 'App' },
       { value: 'presto', text: 'Presto' },
-      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} },
       { value: 'mysql', icon: 'icon-mysql' },
       { value: 'oracle', icon: 'icon-amy-db-oracle', style: {lineHeight: '40px'} },
       { value: 'mongodb', icon: 'icon-mongodb', style: {fontSize: '26px'} }
@@ -196,7 +173,10 @@ export class WorkbenchFlowForm extends React.Component {
       { value: 'es', icon: 'icon-elastic', style: {fontSize: '24px'} },
       { value: 'hbase', icon: 'icon-hbase1' },
       { value: 'phoenix', text: 'Phoenix' },
-      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} }
+      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} },
+      { value: 'postgresql', icon: 'icon-postgresql', style: {fontSize: '31px'} },
+      { value: 'cassandra', icon: 'icon-cass', style: {fontSize: '52px', lineHeight: '60px'} },
+      { value: 'mongodb', icon: 'icon-mongodb', style: {fontSize: '26px'} }
     ]
 
     let formValues = ''
@@ -290,13 +270,15 @@ export class WorkbenchFlowForm extends React.Component {
       )
 
     const columns = [{
-      title: 'Order',
+      title: 'Num',
       dataIndex: 'order',
-      key: 'order'
+      key: 'order',
+      width: '12%'
     }, {
       title: 'Config Info',
       dataIndex: 'transformConfigInfo',
-      key: 'transformConfigInfo'
+      key: 'transformConfigInfo',
+      width: '65%'
     }, {
       title: 'Transform Config Info Request',
       dataIndex: 'transformConfigInfoRequest',
@@ -310,7 +292,7 @@ export class WorkbenchFlowForm extends React.Component {
     }, {
       title: 'Action',
       key: 'action',
-      width: 250,
+      // width: '23%',
       render: (text, record) => {
         const transformUpHide = record.order === 1 ? 'hide' : ''
         const transformDownHide = record.order === transformTableSource.length ? 'hide' : ''
@@ -372,7 +354,7 @@ export class WorkbenchFlowForm extends React.Component {
       ? undefined
       : selectStreamKafkaTopicValue.map(s => (<Option key={s.id} value={`${s.id}`}>{s.name}</Option>))
 
-    const { etpStrategyConfirmValue, resultFieldsValue, flowKafkaTopicValue, flowKafkaInstanceValue } = this.props
+    const { etpStrategyConfirmValue, resultFieldsValue, flowKafkaInstanceValue } = this.props
 
     return (
       <Form className="ri-workbench-form workbench-flow-form">
@@ -432,7 +414,7 @@ export class WorkbenchFlowForm extends React.Component {
               </FormItem>
             </Col>
             <Col span={24} className="ri-input-text">
-              <FormItem label="Kafka Topic" {...itemStyle}>
+              <FormItem label="Kafka Topics" {...itemStyle}>
                 {getFieldDecorator('kafkaTopic', {})(
                   <p className="value-font-style">{flowKafkaTopicValue}</p>
                 )}
@@ -516,7 +498,7 @@ export class WorkbenchFlowForm extends React.Component {
                   }],
                   hidden: streamTypeHiddens[0]
                 })(
-                  <RadioGroup className="radio-group-style" onChange={this.onSelectProtocol} size="default">
+                  <RadioGroup className="radio-group-style" size="default">
                     <RadioButton value="all" className="radio-btn-style radio-btn-extra">All</RadioButton>
                     <RadioButton value="increment" className="radio-btn-style radio-btn-extra">Increment</RadioButton>
                     <RadioButton value="initial" className="radio-btn-style radio-btn-extra">Initial</RadioButton>
@@ -575,7 +557,7 @@ export class WorkbenchFlowForm extends React.Component {
             </Col>
             <Col span={24} className={streamTypeClass[0]} style={{marginBottom: '8px'}}>
               <div className="ant-col-6 ant-form-item-label">
-                <label htmlFor="#">Sink Config</label>
+                <label htmlFor="#" className={sinkConfigClass}>Sink Config</label>
               </div>
               <div className="ant-col-17">
                 <div className="ant-form-item-control">
@@ -633,7 +615,7 @@ export class WorkbenchFlowForm extends React.Component {
             </FormItem>
           </Col>
 
-          <Col span={24}>
+          <Col span={24} className="result-field-class">
             <FormItem label="Result Fields" {...itemStyle}>
               {getFieldDecorator('resultFields', {
                 rules: [{
@@ -673,7 +655,7 @@ export class WorkbenchFlowForm extends React.Component {
           </Col>
 
           <Col span={6}></Col>
-          <Col span={17} className={transformTableClassName}>
+          <Col span={18} className={transformTableClassName}>
             <Table
               // rowKey={transformTableSource.order}
               dataSource={transformTableSource}
@@ -716,7 +698,7 @@ export class WorkbenchFlowForm extends React.Component {
               )}
             </FormItem>
           </Col>
-          <Col span={8} className={`ds-class ${dataframeShowSelected}`}>
+          <Col span={7} className={`ds-class ${dataframeShowSelected}`}>
             <FormItem label="Number" {...itemStyleDFSN}>
               {getFieldDecorator('dataframeShowNum', {
                 rules: [{
@@ -764,7 +746,7 @@ export class WorkbenchFlowForm extends React.Component {
             <div className="ant-row ant-form-item">
               <Row>
                 <Col span={8} className="ant-form-item-label">
-                  <label htmlFor="#">Kafka Topic</label>
+                  <label htmlFor="#">Kafka Topics</label>
                 </Col>
                 <Col span={15}>
                   <div className="ant-form-item-control">

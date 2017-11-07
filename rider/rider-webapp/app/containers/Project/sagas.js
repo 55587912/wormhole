@@ -26,7 +26,8 @@ import {
   LOAD_SINGLE_PROJECT,
   ADD_PROJECT,
   EDIT_PROJECT,
-  LOAD_PROJECT_NAME_VALUE
+  LOAD_PROJECT_NAME_VALUE,
+  DELETE_SINGLE_PROJECT
 } from './constants'
 import {
   projectsLoaded,
@@ -35,6 +36,9 @@ import {
   projectAdded,
   projectEdited,
   projectNameInputValueLoaded,
+  projectNameInputValueErrorLoaded,
+  singleProjectDeleted,
+  singleProjectDeletedError,
   getError
 } from './action'
 
@@ -137,7 +141,7 @@ export function* getProjectNameInputValue ({ payload }) {
       url: `${api.projectList}?name=${payload.value}`
     })
     if (result.code === 409) {
-      yield put(projectNameInputValueLoaded(result.msg, payload.reject))
+      yield put(projectNameInputValueErrorLoaded(result.msg, payload.reject))
     } else {
       yield put(projectNameInputValueLoaded(result.payload, payload.resolve))
     }
@@ -150,11 +154,32 @@ export function* getProjectNameInputValueWatcher () {
   yield fork(throttle, 500, LOAD_PROJECT_NAME_VALUE, getProjectNameInputValue)
 }
 
+export function* deleteSinglePro ({ payload }) {
+  try {
+    const result = yield call(request, {
+      method: 'delete',
+      url: `${api.projectList}/${payload.projectId}`
+    })
+    if (result.code === 200) {
+      yield put(singleProjectDeleted(payload.projectId, payload.resolve))
+    } else if (result.code === 412) {
+      yield put(singleProjectDeletedError(result.msg, payload.reject))
+    }
+  } catch (err) {
+    yield put(getError(err))
+  }
+}
+
+export function* deleteSingleProWatcher () {
+  yield fork(takeEvery, DELETE_SINGLE_PROJECT, deleteSinglePro)
+}
+
 export default [
   getProjectsWatcher,
   getUserProjectsWatcher,
   getSingleProjectWatcher,
   addProjectWatcher,
   editProjectWatcher,
-  getProjectNameInputValueWatcher
+  getProjectNameInputValueWatcher,
+  deleteSingleProWatcher
 ]

@@ -33,10 +33,7 @@ export class WorkbenchSinkForm extends React.PureComponent {
   constructor (props) {
     super(props)
     this.state = {
-      configModalVisible: false,
-      sinkMode: '',
-      configColor: '',
-      configIcon: 'minus-circle-o'
+      sinkMode: ''
     }
   }
 
@@ -46,9 +43,7 @@ export class WorkbenchSinkForm extends React.PureComponent {
     })
   }
 
-  onSinkTypeSelect = (val) => {
-    this.props.onSinkTypeSelect(val)
-  }
+  onSinkTypeSelect = (val) => this.props.onSinkTypeSelect(val)
 
   render () {
     const { getFieldDecorator } = this.props.form
@@ -60,7 +55,7 @@ export class WorkbenchSinkForm extends React.PureComponent {
     const sourceDataSystemData = [
       { value: 'oracle', icon: 'icon-amy-db-oracle' },
       { value: 'mysql', icon: 'icon-mysql' },
-      { value: 'kafka', text: 'Kafka' }
+      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} }
     ]
 
     return (

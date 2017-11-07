@@ -46,6 +46,8 @@ trait BaseRoutesApi extends Directives {
 
   def putRoute(session: SessionClass, base: BaseEntity): Route
 
+  def deleteRoute(route: String): Route
+
 }
 
 
@@ -58,7 +60,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
           session =>
             if (session.roleType != "admin") {
               riderLogger.warn(s"user ${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, session))
+              complete(OK, getHeader(403, session))
             }
             else {
               onComplete(baseDal.findById(id).mapTo[Option[BaseEntity]]) {
@@ -72,7 +74,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
                 }
                 case Failure(ex) =>
                   riderLogger.error(s"user ${session.userId} select $route by $id failed", ex)
-                  complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                  complete(OK, getHeader(451, ex.getMessage, session))
               }
             }
         }
@@ -87,7 +89,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
         session =>
           if (session.roleType != "admin") {
             riderLogger.warn(s"user ${session.userId} has no permission to access it.")
-            complete(Forbidden, getHeader(403, session))
+            complete(OK, getHeader(403, session))
           }
           else {
             onComplete(baseDal.findAll.mapTo[Seq[BaseEntity]]) {
@@ -96,7 +98,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
                 complete(OK, ResponseSeqJson[BaseEntity](getHeader(200, session), baseSeq))
               case Failure(ex) =>
                 riderLogger.error(s"user ${session.userId} select all $route failed", ex)
-                complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                complete(OK, getHeader(451, ex.getMessage, session))
             }
           }
       }
@@ -113,7 +115,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
             session =>
               if (session.roleType != "admin") {
                 riderLogger.warn(s"user ${session.userId} has no permission to access it.")
-                complete(Forbidden, getHeader(403, session))
+                complete(OK, getHeader(403, session))
               }
               else {
                 val future = if (visible.getOrElse(true)) baseDal.findByFilter(_.active === visible) else baseDal.findAll
@@ -123,7 +125,7 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
                     complete(OK, ResponseSeqJson[BaseEntity](getHeader(200, session), baseSeq))
                   case Failure(ex) =>
                     riderLogger.error(s"user ${session.userId} select all $route failed where active is ${visible.getOrElse(true)}", ex)
-                    complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                    complete(OK, getHeader(451, ex.getMessage, session))
                 }
               }
           }
@@ -135,22 +137,22 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
   override def postRoute(session: SessionClass, simple: SimpleBaseEntity, tip: String): Route = {
     if (session.roleType != "admin") {
       riderLogger.warn(s"user ${session.userId} has no permission to access it.")
-      complete(Forbidden, getHeader(403, session))
+      complete(OK, getHeader(403, session))
     }
     else {
       val entity = generateEntity(simple, session).asInstanceOf[A]
       onComplete(baseDal.insert(entity).mapTo[BaseEntity]) {
         case Success(base) =>
-          riderLogger.info(s"user ${session.userId} inserted $base success.")
+          riderLogger.info(s"user ${session.userId} insert success.")
           complete(OK, ResponseJson[BaseEntity](getHeader(200, session), base))
         case Failure(ex) =>
           if (ex.toString.contains("Duplicate entry")) {
-            riderLogger.error(s"user ${session.userId} inserted $entity failed", ex)
-            complete(Conflict, getHeader(409, tip, session))
+            riderLogger.error(s"user ${session.userId} insert failed", ex)
+            complete(OK, getHeader(409, tip, session))
           }
           else {
-            riderLogger.error(s"user ${session.userId} inserted $entity failed", ex)
-            complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+            riderLogger.error(s"user ${session.userId} insert failed", ex)
+            complete(OK, getHeader(451, ex.getMessage, session))
           }
       }
     }
@@ -161,26 +163,48 @@ class BaseAdminApiImpl[T <: BaseTable[A], A <: BaseEntity](baseDal: BaseDal[T, A
   override def putRoute(session: SessionClass, base: BaseEntity): Route = {
     if (session.roleType != "admin") {
       riderLogger.warn(s"${session.userId} has no permission to access it.")
-      complete(Forbidden, getHeader(403, session))
+      complete(OK, getHeader(403, session))
     }
     else {
       val entity = generateEntity(base, session).asInstanceOf[A]
       onComplete(baseDal.update(entity)) {
         case Success(result) =>
           if (result != 0) {
-            riderLogger.info(s"user ${session.userId} updated $entity success.")
+            riderLogger.info(s"user ${session.userId} update success.")
             complete(OK, ResponseJson[BaseEntity](getHeader(200, session), base))
           }
           else {
-            riderLogger.warn(s"user ${session.userId} updated $entity failed because it doesn't exist.")
-            complete(NotFound, ResponseJson[String](getHeader(404, session), ""))
+            riderLogger.warn(s"user ${session.userId} update failed because it doesn't exist.")
+            complete(OK, ResponseJson[String](getHeader(404, session), ""))
           }
         case Failure(ex) =>
-          riderLogger.error(s"user ${session.userId} updated $entity failed", ex)
-          complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+          riderLogger.error(s"user ${session.userId} update failed", ex)
+          complete(OK, getHeader(451, ex.getMessage, session))
       }
     }
 
+  }
+
+  override def deleteRoute(route: String): Route = path(route / LongNumber) {
+    id =>
+      delete {
+        authenticateOAuth2Async[SessionClass]("rider", AuthorizationProvider.authorize) {
+          session =>
+            if (session.roleType != "admin") {
+              riderLogger.warn(s"user ${session.userId} has no permission to access it.")
+              complete(OK, getHeader(403, session))
+            } else {
+              onComplete(baseDal.deleteById(id).mapTo[Int]) {
+                case Success(result) =>
+                  riderLogger.info(s"user ${session.userId} delete $route $id success")
+                  complete(OK, getHeader(200, session))
+                case Failure(ex) =>
+                  riderLogger.error(s"user ${session.userId} delete $route $id failed", ex)
+                  complete(OK, getHeader(451, session))
+              }
+            }
+        }
+      }
   }
 
 

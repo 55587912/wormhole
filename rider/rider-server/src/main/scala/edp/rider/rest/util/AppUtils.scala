@@ -73,9 +73,16 @@ object AppUtils extends RiderLogger {
                 .map(job => job.status).update("starting")).mapTo[Int], minTimeOut)
               else Await.result(db.run(modules.flowQuery.filter(flow => flow.sourceNs === sourceNs && flow.sinkNs === sinkNs && (flow.status === "stopped" || flow.status === "failed"))
                 .map(flow => flow.status).update("starting")).mapTo[Int], minTimeOut)
-            riderLogger.info(s"update result: $updateResult")
             if (updateResult != 0) {
               updateSinkAppNs(appJob, appFlow, sinkNamespace, session, projectId)
+              if (appJob.nonEmpty) {
+                if(!isJson(appJob.get.sinkConfig))
+                  return Left(ResponseHeader(400, s"job sinkConfig ${appJob.get.sinkConfig} is not json type"))
+              }
+              if (appFlow.nonEmpty) {
+                if(!isJson(appFlow.get.sinkConfig))
+                  return Left(ResponseHeader(400, s"flow sinkConfig ${appFlow.get.sinkConfig} is not json type"))
+              }
               Right(insertOrUpdate(appJob, appFlow, sourceNs, sinkNs, session, projectId, streamId))
             }
             else {
@@ -100,27 +107,27 @@ object AppUtils extends RiderLogger {
       case Left(response) => Left(response)
     }
   }
-
+  //TODO change this function
   def insertOrUpdate(appJob: Option[AppJob], appFlow: Option[AppFlow], sourceNs: String, sinkNs: String, session: SessionClass, projectId: Long, streamId: Option[Long]): (Option[Job], Option[Flow]) = {
     if (appJob.nonEmpty) {
       val jobSearch = Await.result(modules.jobDal.findByFilter(job => job.sourceNs === sourceNs && job.sinkNs === sinkNs), minTimeOut).headOption
       val job =
         if (jobSearch.nonEmpty) {
-          val startedTime = if (jobSearch.get.startedTime.getOrElse("") == "") Some(currentSec) else jobSearch.get.startedTime
+          val startedTime = Some(currentSec)
           val stoppedTime = if (jobSearch.get.stoppedTime.getOrElse("") == "") null else jobSearch.get.stoppedTime
           val sourceType = if (appJob.get.sourceType.getOrElse("") == "") jobSearch.get.sourceType else appJob.get.sourceType.get
-          val consumedProtocol = if (appJob.get.consumedProtocol.getOrElse("") == "") jobSearch.get.consumedProtocol else appJob.get.consumedProtocol.get
-          val jobUpdate = Job(jobSearch.get.id, genJobName(projectId, sourceNs, sinkNs), projectId, sourceNs, sinkNs, sourceType, consumedProtocol,
+         // val consumedProtocol = if (appJob.get.consumedProtocol.getOrElse("") == "") jobSearch.get.sourceConfig.get else appJob.get.consumedProtocol.get
+          val jobUpdate = Job(jobSearch.get.id, genJobName(projectId, sourceNs, sinkNs), projectId, sourceNs, sinkNs, sourceType, jobSearch.get.sparkConfig,jobSearch.get.startConfig,
             appJob.get.eventTsStart, appJob.get.eventTsEnd, jobSearch.get.sourceConfig, Some(appJob.get.sinkConfig), Some(genJobTranConfigByColumns(jobSearch.get.tranConfig.getOrElse(""), appJob.get.sinkColumns)),
-            jobSearch.get.jobConfig, "starting", Some(""), jobSearch.get.logPath, startedTime, stoppedTime, jobSearch.get.createTime, jobSearch.get.createBy, currentSec, session.userId)
+             "starting", Some(""), jobSearch.get.logPath, startedTime, stoppedTime, jobSearch.get.createTime, jobSearch.get.createBy, currentSec, session.userId)
           Await.result(modules.jobDal.update(jobUpdate), minTimeOut)
-          riderLogger.info(s"user ${session.userId} project $projectId update job $jobUpdate success.")
+          riderLogger.info(s"user ${session.userId} project $projectId update job success.")
           jobUpdate
         } else {
-          val jobInsert = Job(0, genJobName(projectId, sourceNs, sinkNs), projectId, sourceNs, sinkNs, appJob.get.sourceType.getOrElse("hdfs_txt"), appJob.get.consumedProtocol.getOrElse("all"),
-            appJob.get.eventTsStart, appJob.get.eventTsEnd, Some(""), Some(appJob.get.sinkConfig), Some(genJobTranConfigByColumns(sinkColumns = appJob.get.sinkColumns)), Some(""), "starting", Some(""), Some(getLogPath(genJobName(projectId, sourceNs, sinkNs))), Some(currentSec), null, currentSec, session.userId, currentSec, session.userId)
+          val jobInsert = Job(0, genJobName(projectId, sourceNs, sinkNs), projectId, sourceNs, sinkNs, appJob.get.sourceType.getOrElse("hdfs_txt"), Some(""),"",
+            appJob.get.eventTsStart, appJob.get.eventTsEnd, Some(""), Some(appJob.get.sinkConfig), Some(genJobTranConfigByColumns(sinkColumns = appJob.get.sinkColumns)),  "starting", Some(""), Some(getLogPath(genJobName(projectId, sourceNs, sinkNs))), Some(currentSec), null, currentSec, session.userId, currentSec, session.userId)
           val result = Await.result(modules.jobDal.insert(jobInsert), minTimeOut)
-          riderLogger.info(s"user ${session.userId} project $projectId insert job $jobInsert success.")
+          riderLogger.info(s"user ${session.userId} project $projectId insert job success.")
           result
         }
       (Some(job), None)
@@ -137,14 +144,14 @@ object AppUtils extends RiderLogger {
             Some(genFlowTranConfigByColumns(flowSearch.get.tranConfig.getOrElse(""), appFlow.get.sinkColumns)), "updating",
             startedTime, stoppedTime, active = true, flowSearch.get.createTime, flowSearch.get.createBy, currentSec, session.userId)
           Await.result(modules.flowDal.update(flowUpdate), minTimeOut)
-          riderLogger.info(s"user ${session.userId} project $projectId update flow $flowUpdate success.")
+          riderLogger.info(s"user ${session.userId} project $projectId update flow success.")
           flowUpdate
         } else {
           val flowInsert = Flow(0, projectId, streamId.get, sourceNs, sinkNs, appFlow.get.consumedProtocol.getOrElse("all"), Some(appFlow.get.sinkConfig),
             Some(genFlowTranConfigByColumns(sinkColumns = appFlow.get.sinkColumns)), "starting",
             Some(currentSec), null, active = true, currentSec, session.userId, currentSec, session.userId)
           val result = Await.result(modules.flowDal.insert(flowInsert), minTimeOut)
-          riderLogger.info(s"user ${session.userId} project $projectId insert flow $flowInsert success.")
+          riderLogger.info(s"user ${session.userId} project $projectId insert flow success.")
           result
         }
       (None, Some(flow))
@@ -218,7 +225,7 @@ object AppUtils extends RiderLogger {
     val nsInsert = Namespace(0, sinkSys, sinkInstance, sinkDatabase, sinkTable, "*", "*", "*", database.permission,
       Some(sinkKeys), database.id, instance.id, active = true, currentSec, session.userId, currentSec, session.userId)
     val ns = Await.result(modules.namespaceDal.insert(nsInsert), minTimeOut)
-    riderLogger.info(s"user ${session.userId} project $projectId insert namespace $nsInsert success.")
+    riderLogger.info(s"user ${session.userId} project $projectId insert namespace success.")
     val rel = RelProjectNs(0, projectId, ns.id, active = true, currentSec, session.userId, currentSec, session.userId)
     Await.result(modules.relProjectNsDal.insert(rel), minTimeOut)
     riderLogger.info(s"user ${session.userId} project $projectId insert request sink namespace $ns for dataSys $sinkSys, instance $sinkInstance, database $sinkDatabase, table $sinkTable success.")

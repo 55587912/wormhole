@@ -28,6 +28,7 @@ import Table from 'antd/lib/table'
 import Button from 'antd/lib/button'
 import Icon from 'antd/lib/icon'
 import Tooltip from 'antd/lib/tooltip'
+import Popover from 'antd/lib/popover'
 import Modal from 'antd/lib/modal'
 import message from 'antd/lib/message'
 import Form from 'antd/lib/form'
@@ -38,7 +39,7 @@ import DatePicker from 'antd/lib/date-picker'
 const { RangePicker } = DatePicker
 
 import { loadAdminAllUsers, loadUserUsers, addUser, editUser, loadEmailInputValue, loadSelectUsers } from './action'
-import { selectUsers, selectError, selectModalLoading } from './selectors'
+import { selectUsers, selectError, selectModalLoading, selectEmailExited } from './selectors'
 
 export class User extends React.PureComponent {
   constructor (props) {
@@ -74,13 +75,8 @@ export class User extends React.PureComponent {
       updateEndTimeText: '',
       filterDropdownVisibleUpdateTime: false,
 
-      UserHideClassName: '',
-      UserShowClassName: 'hide',
-
       editUsersMsgData: {},
-      editUsersPswData: {},
-
-      emailExited: false
+      editUsersPswData: {}
     }
   }
 
@@ -187,8 +183,8 @@ export class User extends React.PureComponent {
   }
 
   onModalOk = () => {
-    const { formType, emailExited, editUsersMsgData, editUsersPswData } = this.state
-    const { onAddUser, onEditUser } = this.props
+    const { formType, editUsersMsgData, editUsersPswData } = this.state
+    const { onAddUser, onEditUser, emailExited } = this.props
 
     this.userForm.validateFieldsAndScroll((err, values) => {
       if (!err) {
@@ -225,19 +221,12 @@ export class User extends React.PureComponent {
    * 新增时，判断email是否已存在
    * */
   onInitEmailInputValue = (value) => {
-    this.props.onLoadEmailInputValue(value, () => {
-      this.setState({
-        emailExited: false
-      })
-    }, () => {
+    this.props.onLoadEmailInputValue(value, () => {}, () => {
       this.userForm.setFields({
         email: {
           value: value,
           errors: [new Error('该 Email 已存在')]
         }
-      })
-      this.setState({
-        emailExited: true
       })
     })
   }
@@ -321,6 +310,8 @@ export class User extends React.PureComponent {
         if ((match < startSearchTime) || (match > endSearchTime)) {
           return null
         }
+        console.log('fff', record[columnName])
+        console.log('ggg', this.state.startTimeText)
         return {
           ...record,
           [columnName]: (
@@ -356,6 +347,7 @@ export class User extends React.PureComponent {
               <Row>
                 <Col span={9}>
                   <Input
+                    ref={ele => { this.searchInput = ele }}
                     placeholder="Start ID"
                     onChange={this.onInputChange('searchStartIdText')}
                   />
@@ -377,35 +369,9 @@ export class User extends React.PureComponent {
           </div>
         ),
         filterDropdownVisible: this.state.filterDropdownVisibleId,
-        onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleId: visible })
-      }, {
-        title: 'Project',
-        dataIndex: 'projectNames',
-        key: 'projectNames',
-        className: `${userClassHide}`,
-        sorter: (a, b) => {
-          if (typeof a.projectNames === 'object') {
-            return a.projectNamesOrigin < b.projectNamesOrigin ? -1 : 1
-          } else {
-            return a.projectNames < b.projectNames ? -1 : 1
-          }
-        },
-        sortOrder: sortedInfo.columnKey === 'projectNames' && sortedInfo.order,
-        filterDropdown: (
-          <div className="custom-filter-dropdown">
-            <Input
-              placeholder="Project Name"
-              value={this.state.searchTextUserProject}
-              onChange={this.onInputChange('searchTextUserProject')}
-              onPressEnter={this.onSearch('projectNames', 'searchTextUserProject', 'filterDropdownVisibleUserProject')}
-            />
-            <Button
-              type="primary"
-              onClick={this.onSearch('projectNames', 'searchTextUserProject', 'filterDropdownVisibleUserProject')}>Search</Button>
-          </div>
-        ),
-        filterDropdownVisible: this.state.filterDropdownVisibleUserProject,
-        onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleUserProject: visible})
+        onFilterDropdownVisibleChange: visible => this.setState({
+          filterDropdownVisibleId: visible
+        }, () => this.searchInput.focus())
       }, {
         title: 'Name',
         dataIndex: 'name',
@@ -421,6 +387,7 @@ export class User extends React.PureComponent {
         filterDropdown: (
           <div className="custom-filter-dropdown">
             <Input
+              ref={ele => { this.searchInput = ele }}
               placeholder="Name"
               value={this.state.searchName}
               onChange={this.onInputChange('searchName')}
@@ -430,7 +397,9 @@ export class User extends React.PureComponent {
           </div>
         ),
         filterDropdownVisible: this.state.filterDropdownVisibleName,
-        onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleName: visible })
+        onFilterDropdownVisibleChange: visible => this.setState({
+          filterDropdownVisibleName: visible
+        }, () => this.searchInput.focus())
       }, {
         title: 'Email',
         dataIndex: 'email',
@@ -446,6 +415,7 @@ export class User extends React.PureComponent {
         filterDropdown: (
           <div className="custom-filter-dropdown">
             <Input
+              ref={ele => { this.searchInput = ele }}
               placeholder="Email"
               value={this.state.searchEmail}
               onChange={this.onInputChange('searchEmail')}
@@ -455,12 +425,14 @@ export class User extends React.PureComponent {
           </div>
         ),
         filterDropdownVisible: this.state.filterDropdownVisibleEmail,
-        onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleEmail: visible })
+        onFilterDropdownVisibleChange: visible => this.setState({
+          filterDropdownVisibleEmail: visible
+        }, () => this.searchInput.focus())
       }, {
         title: 'Role Type',
         dataIndex: 'roleType',
         key: 'roleType',
-        className: 'text-align-center',
+        // className: 'text-align-center',
         sorter: (a, b) => a.roleType < b.roleType ? -1 : 1,
         sortOrder: sortedInfo.columnKey === 'roleType' && sortedInfo.order,
         filters: [
@@ -537,10 +509,18 @@ export class User extends React.PureComponent {
       }, {
         title: 'Action',
         key: 'action',
-        width: 250,
         className: `text-align-center ${userClassHide}`,
         render: (text, record) => (
           <span className="ant-table-action-column">
+            <Popover
+              placement="left"
+              content={<div className="project-name-detail">
+                <p><strong>   Project Names：</strong>{record.projectNames}</p>
+              </div>}
+              title={<h3>详情</h3>}
+              trigger="click">
+              <Button icon="file-text" shape="circle" type="ghost"></Button>
+            </Popover>
             <Tooltip title="修改用户信息">
               <Button icon="user" shape="circle" type="ghost" onClick={this.showDetail(record)} />
             </Tooltip>
@@ -645,6 +625,7 @@ User.propTypes = {
   // ]),
   // error: React.PropTypes.bool,
   modalLoading: React.PropTypes.bool,
+  emailExited: React.PropTypes.bool,
   projectIdGeted: React.PropTypes.string,
   userClassHide: React.PropTypes.string,
   onLoadAdminAllUsers: React.PropTypes.func,
@@ -669,7 +650,8 @@ export function mapDispatchToProps (dispatch) {
 const mapStateToProps = createStructuredSelector({
   users: selectUsers(),
   error: selectError(),
-  modalLoading: selectModalLoading()
+  modalLoading: selectModalLoading(),
+  emailExited: selectEmailExited()
 })
 
 export default connect(mapStateToProps, mapDispatchToProps)(User)

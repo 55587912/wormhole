@@ -44,7 +44,7 @@ import DatePicker from 'antd/lib/date-picker'
 const { RangePicker } = DatePicker
 
 import { selectFlows, selectError } from './selectors'
-import { loadAdminAllFlows, loadUserAllFlows, loadAdminSingleFlow, operateUserFlow, deleteFlow, editLogForm, saveForm, checkOutForm, loadSourceLogDetail, loadSourceSinkDetail, loadSinkWriteRrrorDetail, loadSourceInput, chuckAwayFlow, operateFlow } from './action'
+import { loadAdminAllFlows, loadUserAllFlows, loadAdminSingleFlow, operateUserFlow, editLogForm, saveForm, checkOutForm, loadSourceLogDetail, loadSourceSinkDetail, loadSinkWriteRrrorDetail, loadSourceInput, chuckAwayFlow, operateFlow } from './action'
 
 export class Flow extends React.Component {
   constructor (props) {
@@ -138,9 +138,7 @@ export class Flow extends React.Component {
     })
   }
 
-  onSelectChange = (selectedRowKeys) => {
-    this.setState({ selectedRowKeys })
-  }
+  onSelectChange = (selectedRowKeys) => this.setState({ selectedRowKeys })
 
   /**
    * 批量操作
@@ -148,44 +146,45 @@ export class Flow extends React.Component {
    */
   handleMenuClick = (selectedRowKeys) => (e) => {
     if (selectedRowKeys.length > 0) {
+      let menuAction = ''
+      let menuMsg = ''
+      if (e.key === 'menuStart') {
+        menuAction = 'start'
+        menuMsg = '启动'
+      } else if (e.key === 'menuStop') {
+        menuAction = 'stop'
+        menuMsg = '停止'
+      } else if (e.key === 'menuDelete') {
+        menuAction = 'delete'
+        menuMsg = '删除'
+      }
+
       const requestValue = {
         projectId: Number(this.props.projectIdGeted),
-        streamId: 0,
-        flowIds: this.state.selectedRowKeys.join(',')
+        flowIds: this.state.selectedRowKeys.join(','),
+        action: menuAction
       }
-      if (e.key === 'menuStart') {
-        this.props.onOperateUserFlow(Object.assign({}, requestValue, { action: 'start' }), () => {
-          this.setState({
-            selectedRowKeys: []
-          })
-          message.success('Start 成功！', 3)
-        }, (result) => {
-          message.error(`操作失败：${result}`, 3)
+
+      this.props.onOperateUserFlow(requestValue, (result) => {
+        this.setState({
+          selectedRowKeys: []
         })
-      } else if (e.key === 'menuStop') {
-        this.props.onOperateUserFlow(Object.assign({}, requestValue, { action: 'stop' }), () => {
-          this.setState({
-            selectedRowKeys: []
-          })
-          message.success('Stop 成功！', 3)
-        }, (result) => {
-          message.error(`操作失败：${result}`, 3)
-        })
-      } else if (e.key === 'menuDelete') {
-        // const startedOrStarting = flowIds.split(',')
-        //   .map(id => this.props.flows.find(flow => flow.id === Number(id)))
-        //   .filter(flow => flow.status === 'started' || flow.status === 'starting')
-        //
-        // if (startedOrStarting.length) {
-        //   message.warning('Flow项已启动，不能删除！')
-        // } else {
-        //   this.props.onDeleteFlow(this.props.projectIdGeted, flowIds, () => {
-        //     this.setState({
-        //       selectedRowKeys: []
-        //     })
-        //   })
-        // }
-      }
+
+        if (typeof (result) === 'object') {
+          const resultFailed = result.filter(i => i.msg.indexOf('failed') > -1)
+          if (resultFailed.length > 0) {
+            const resultFailedIdArr = resultFailed.map(i => i.id)
+            const resultFailedIdStr = resultFailedIdArr.join('、')
+            message.error(`Flow ID ${resultFailedIdStr} ${menuMsg}失败！`, 5)
+          } else {
+            message.success(`${menuMsg}成功！`, 3)
+          }
+        } else {
+          message.success(`${menuMsg}成功！`, 3)
+        }
+      }, (result) => {
+        message.error(`操作失败：${result}`, 3)
+      })
     } else {
       message.warning('请选择 Flow！', 3)
     }
@@ -206,15 +205,31 @@ export class Flow extends React.Component {
     const requestValue = {
       projectId: record.projectId,
       action: action,
-      streamId: record.streamId,
       flowIds: `${record.id}`
     }
-    this.props.onOperateUserFlow(requestValue, () => {
-      const actionToUpper = `${action.substring(0, 1).toUpperCase()}${action.substring(1)}`
-      if (action === 'renew') {
-        message.success('生效！', 3)
+
+    let singleMsg = ''
+    if (action === 'start') {
+      singleMsg = '启动'
+    } else if (action === 'stop') {
+      singleMsg = '停止'
+    } else if (action === 'delete') {
+      singleMsg = '删除'
+    }
+
+    this.props.onOperateUserFlow(requestValue, (result) => {
+      if (action === 'delete') {
+        message.success(`${singleMsg}成功！`, 3)
       } else {
-        message.success(`${actionToUpper} 成功！`, 3)
+        if (result.msg.indexOf('failed') > -1) {
+          message.error(`Flow ID ${result.id} ${singleMsg}失败！`, 3)
+        } else {
+          if (action === 'renew') {
+            message.success('生效！', 3)
+          } else {
+            message.success(`${singleMsg}成功！`, 3)
+          }
+        }
       }
     }, (result) => {
       message.error(`操作失败：${result}`, 3)
@@ -222,41 +237,25 @@ export class Flow extends React.Component {
   }
 
   // start
-  onShowFlowStart = (record, action) => (e) => {
-    this.singleOpreateFlow(record, action)
-  }
+  onShowFlowStart = (record, action) => (e) => this.singleOpreateFlow(record, action)
 
   // stop
-  stopFlowBtn = (record, action) => (e) => {
-    this.singleOpreateFlow(record, action)
-  }
+  stopFlowBtn = (record, action) => (e) => this.singleOpreateFlow(record, action)
 
   // renew
-  updateFlow = (record, action) => (e) => {
-    this.singleOpreateFlow(record, action)
-  }
+  updateFlow = (record, action) => (e) => this.singleOpreateFlow(record, action)
 
   // delete
-  onSingleDeleteFlow = (record) => (e) => {
-    // if (record.status === 'started' || record.status === 'starting') {
-    //   message.warning('Flow项已启动，不能删除！')
-    // } else {
-    //   this.props.onDeleteFlow(this.props.projectIdGeted, `${record.id}`, () => {})
-    // }
-  }
+  onSingleDeleteFlow = (record, action) => (e) => this.singleOpreateFlow(record, action)
 
   // backfill
   onShowBackfill =(record) => (e) => {
     this.showTimeModal()
-    this.setState({
-      flowIdTemp: record.id
-    })
+    this.setState({ flowIdTemp: record.id })
   }
 
   // copy
-  onCopyFlow = (record) => (e) => {
-    this.props.onShowCopyFlow(record)
-  }
+  onCopyFlow = (record) => (e) => this.props.onShowCopyFlow(record)
 
   handleFlowChange = (pagination, filters, sorter) => {
     this.setState({
@@ -310,11 +309,7 @@ export class Flow extends React.Component {
     this.flowsDetail.onCancelCleanData()
   }
 
-  handleTimeCancel = (e) => {
-    this.setState({
-      timeModalVisible: false
-    })
-  }
+  handleTimeCancel = (e) => this.setState({ timeModalVisible: false })
 
   handleTimeOk = () => {
     if (this.flowsTime.state.startValue === null) {
@@ -404,11 +399,7 @@ export class Flow extends React.Component {
     }
   }
 
-  handleEndOpenChange = (status) => {
-    this.setState({
-      filterDatepickerShown: status
-    })
-  }
+  handleEndOpenChange = (status) => this.setState({ filterDatepickerShown: status })
 
   onRangeTimeChange = (value, dateString) => {
     this.setState({
@@ -449,6 +440,13 @@ export class Flow extends React.Component {
   }
 
   onRangeIdSearch = (columnName, startText, endText, visible) => () => {
+    let infoFinal = ''
+    if (columnName === 'id') {
+      infoFinal = this.state[startText] || this.state[endText] ? { id: [0] } : { id: [] }
+    } else if (columnName === 'streamId') {
+      infoFinal = this.state[startText] || this.state[endText] ? { streamId: [0] } : { streamId: [] }
+    }
+
     this.setState({
       [visible]: false,
       currentFlows: this.state.originFlows.map((record) => {
@@ -458,7 +456,7 @@ export class Flow extends React.Component {
         }
         return record
       }).filter(record => !!record),
-      filteredInfo: this.state[startText] || this.state[endText] ? { id: [0] } : { id: [] }
+      filteredInfo: infoFinal
     })
   }
 
@@ -483,6 +481,7 @@ export class Flow extends React.Component {
             <Row>
               <Col span={9}>
                 <Input
+                  ref={ele => { this.searchInput = ele }}
                   placeholder="Start ID"
                   onChange={this.onInputChange('searchStartIdText')}
                 />
@@ -504,7 +503,9 @@ export class Flow extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleId,
-      onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleId: visible })
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleId: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Project',
       dataIndex: 'projectName',
@@ -521,6 +522,7 @@ export class Flow extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Project Name"
             value={this.state.searchTextFlowProject}
             onChange={this.onInputChange('searchTextFlowProject')}
@@ -532,7 +534,9 @@ export class Flow extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleFlowProject,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleFlowProject: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleFlowProject: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Source Namespace',
       dataIndex: 'sourceNs',
@@ -548,6 +552,7 @@ export class Flow extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Source Namespace"
             value={this.state.searchTextSourceNs}
             onChange={this.onInputChange('searchTextSourceNs')}
@@ -559,7 +564,9 @@ export class Flow extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleSourceNs,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleSourceNs: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleSourceNs: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Sink Namespace',
       dataIndex: 'sinkNs',
@@ -575,6 +582,7 @@ export class Flow extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Sink Namespace"
             value={this.state.searchTextSinkNs}
             onChange={this.onInputChange('searchTextSinkNs')}
@@ -586,7 +594,9 @@ export class Flow extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleSinkNs,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleSinkNs: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleSinkNs: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Flow Status',
       dataIndex: 'status',
@@ -673,10 +683,48 @@ export class Flow extends React.Component {
         )
       }
     }, {
+      title: 'Stream ID',
+      dataIndex: 'streamId',
+      key: 'streamId',
+      sorter: (a, b) => a.streamId - b.streamId,
+      sortOrder: sortedInfo.columnKey === 'streamId' && sortedInfo.order,
+      filteredValue: filteredInfo.streamId,
+      filterDropdown: (
+        <div className="custom-filter-dropdown custom-filter-dropdown-ps">
+          <Form>
+            <Row>
+              <Col span={9}>
+                <Input
+                  ref={ele => { this.searchInput = ele }}
+                  placeholder="Start ID"
+                  onChange={this.onInputChange('searchStartStreamIdText')}
+                />
+              </Col>
+              <Col span={1}>
+                <p className="ant-form-split">-</p>
+              </Col>
+              <Col span={9}>
+                <Input
+                  placeholder="End ID"
+                  onChange={this.onInputChange('searchEndStreamIdText')}
+                />
+              </Col>
+              <Col span={5} className="text-align-center">
+                <Button type="primary" onClick={this.onRangeIdSearch('streamId', 'searchStartStreamIdText', 'searchEndStreamIdText', 'filterDropdownVisibleStreamId')}>Search</Button>
+              </Col>
+            </Row>
+          </Form>
+        </div>
+      ),
+      filterDropdownVisible: this.state.filterDropdownVisibleStreamId,
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleStreamId: visible
+      }, () => this.searchInput.focus())
+    }, {
       title: 'Stream Type',
       dataIndex: 'streamType',
       key: 'streamType',
-      className: 'text-align-center',
+      // className: 'text-align-center',
       sorter: (a, b) => a.streamType < b.streamType ? -1 : 1,
       sortOrder: sortedInfo.columnKey === 'streamType' && sortedInfo.order,
       filters: [
@@ -686,20 +734,6 @@ export class Flow extends React.Component {
       ],
       filteredValue: filteredInfo.streamType,
       onFilter: (value, record) => record.streamType.includes(value)
-    }, {
-      title: 'Protocol',
-      dataIndex: 'consumedProtocol',
-      key: 'consumedProtocol',
-      className: 'text-align-center',
-      sorter: (a, b) => a.consumedProtocol < b.consumedProtocol ? -1 : 1,
-      sortOrder: sortedInfo.columnKey === 'consumedProtocol' && sortedInfo.order,
-      filters: [
-        {text: 'all', value: 'all'},
-        {text: 'increment', value: 'increment'},
-        {text: 'initial', value: 'initial'}
-      ],
-      filteredValue: filteredInfo.consumedProtocol,
-      onFilter: (value, record) => record.consumedProtocol.includes(value)
     }, {
       title: 'Start Time',
       dataIndex: 'startedTime',
@@ -769,7 +803,6 @@ export class Flow extends React.Component {
       key: 'action',
       className: 'text-align-center',
       render: (text, record) => {
-        // admin 用户除查看详情外，无其他action
         let flowRenewDisabled = false
 
         let flStart = ''
@@ -870,6 +903,12 @@ export class Flow extends React.Component {
               {/* <Tooltip title="backfill" onClick={this.onShowBackfill(record)}>
                <Button icon="rollback" shape="circle" type="ghost" ></Button>
                </Tooltip> */}
+
+              <Popconfirm placement="bottom" title="确定删除吗？" okText="Yes" cancelText="No" onConfirm={this.onSingleDeleteFlow(record, 'delete')}>
+                <Tooltip title="删除">
+                  <Button icon="delete" shape="circle" type="ghost"></Button>
+                </Tooltip>
+              </Popconfirm>
             </span>
           )
         }
@@ -881,7 +920,7 @@ export class Flow extends React.Component {
                 placement="left"
                 content={<div style={{ width: '600px', overflowY: 'auto', height: '260px', overflowX: 'auto' }}>
                   <p><strong>   Project Id：</strong>{record.projectId}</p>
-                  <p><strong>   Stream Id：</strong>{record.streamId}</p>
+                  <p><strong>   Protocol：</strong>{record.consumedProtocol}</p>
                   <p><strong>   Stream Name：</strong>{record.streamName}</p>
                   <p><strong>   Create Time：</strong>{record.createTime}</p>
                   <p><strong>   Update Time：</strong>{record.updateTime}</p>
@@ -898,11 +937,6 @@ export class Flow extends React.Component {
               </Popover>
             </Tooltip>
             {FlowActionSelect}
-            {/* <Popconfirm placement="bottom" title="确定删除吗？" okText="Yes" cancelText="No" onConfirm={this.onSingleDeleteFlow(record)}>
-              <Tooltip title="删除">
-                <Button icon="delete" shape="circle" type="ghost"></Button>
-              </Tooltip>
-            </Popconfirm> */}
           </span>
         )
       }
@@ -942,7 +976,7 @@ export class Flow extends React.Component {
         <Menu.Item key="menuStart"><Icon type="caret-right" />  开始</Menu.Item>
         <Menu.Item key="menuStop">
           <i className="iconfont icon-8080pxtubiaokuozhan100" style={{ fontSize: '12px' }}></i>  停止</Menu.Item>
-        {/* <Menu.Item key="menuDelete"><Icon type="delete" />  删除</Menu.Item> */}
+        <Menu.Item key="menuDelete"><Icon type="delete" />  删除</Menu.Item>
       </Menu>
       )
 
@@ -1025,7 +1059,6 @@ Flow.propTypes = {
   //   React.PropTypes.bool
   // ]),
   className: React.PropTypes.string,
-  // onDeleteFlow: React.PropTypes.func,
   onShowAddFlow: React.PropTypes.func,
   onShowEditFlow: React.PropTypes.func,
   onShowCopyFlow: React.PropTypes.func,
@@ -1050,7 +1083,6 @@ Flow.propTypes = {
 
 export function mapDispatchToProps (dispatch) {
   return {
-    onDeleteFlow: (projectId, id, resolve) => dispatch(deleteFlow(projectId, id, resolve)),
     onLoadAdminAllFlows: (resolve) => dispatch(loadAdminAllFlows(resolve)),
     onLoadUserAllFlows: (projectId, resolve) => dispatch(loadUserAllFlows(projectId, resolve)),
     onLoadAdminSingleFlow: (projectId, resolve) => dispatch(loadAdminSingleFlow(projectId, resolve)),

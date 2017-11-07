@@ -36,6 +36,7 @@ import {
   LOAD_TRANSINKTYPE_NAMESPACE_SUCCESS,
   LOAD_SOURCETOSINK_EXIST,
   LOAD_SOURCETOSINK_EXIST_SUCCESS,
+  LOAD_SOURCETOSINK_EXIST_ERROR,
   ADD_FLOWS,
   ADD_FLOWS_SUCCESS,
   OPERATE_USER_FLOW,
@@ -43,8 +44,6 @@ import {
   OPERATE_FLOW_ERROR,
   CHUCKAWAY_FLOW,
 
-  DELETE_FLOWS,
-  DELETE_FLOWS_SUCCESS,
   LOAD_SOURCELOG_DETAIL,
   LOAD_SOURCELOG_DETAIL_SUCCESS,
   LOAD_SOURCELOG_DETAIL_ERROR,
@@ -236,12 +235,21 @@ export function loadSourceToSinkExist (projectId, sourceNs, sinkNs, resolve, rej
   }
 }
 
-export function sourceToSinkExistLoaded (result, resolve, reject) {
+export function sourceToSinkExistLoaded (result, resolve) {
   return {
     type: LOAD_SOURCETOSINK_EXIST_SUCCESS,
     payload: {
       result,
-      resolve,
+      resolve
+    }
+  }
+}
+
+export function sourceToSinkExistErrorLoaded (result, reject) {
+  return {
+    type: LOAD_SOURCETOSINK_EXIST_ERROR,
+    payload: {
+      result,
       reject
     }
   }
@@ -280,13 +288,12 @@ export function operateUserFlow (values, resolve, reject) {
   }
 }
 
-export function userFlowOperated (result, resolve, reject) {
+export function userFlowOperated (result, resolve) {
   return {
     type: OPERATE_USER_FLOW_SUCCESS,
     payload: {
       result,
-      resolve,
-      reject
+      resolve
     }
   }
 }
@@ -316,28 +323,6 @@ export function flowQueryed (result, resolve) {
     type: QUERY_FLOW_SUCCESS,
     payload: {
       result,
-      resolve
-    }
-  }
-}
-
-export function deleteFlow (projectId, flowsIds, resolve) {
-  return {
-    type: DELETE_FLOWS,
-    payload: {
-      projectId,
-      flowsIds,
-      resolve
-    }
-  }
-}
-
-export function flowDeleted (projectId, flowsIds, resolve) {
-  return {
-    type: DELETE_FLOWS_SUCCESS,
-    payload: {
-      projectId,
-      flowsIds,
       resolve
     }
   }

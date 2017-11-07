@@ -26,38 +26,29 @@ import edp.rider.rest.persistence.base.BaseDalImpl
 import edp.rider.rest.persistence.entities._
 import slick.jdbc.MySQLProfile.api._
 import slick.lifted.TableQuery
-import scala.collection.mutable.ListBuffer
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
+import edp.rider.module.DbModule._
+import scala.concurrent.Future
 
 class FeedbackOffsetDal(feedbackOffsetTable: TableQuery[FeedbackOffsetTable]) extends BaseDalImpl[FeedbackOffsetTable, FeedbackOffset](feedbackOffsetTable) with RiderLogger{
 
-  def getLatestOffset(streamId: Long, topic: String, partitionId: Int): Future[Option[Long]] = {
-    super.findByFilter(str => str.streamId === streamId && str.topicName === topic && str.partitionNum === partitionId)
-      .map[Option[Long]](seq =>
-      if (seq.isEmpty) None
-      else Some(seq.map(_.partitionOffset).max))
+  def getLatestOffset(streamId: Long, topic: String): Future[Option[FeedbackOffset]] = {
+    db.run(feedbackOffsetTable.filter(str => str.streamId === streamId && str.topicName === topic ).sortBy(_.feedbackTime.desc).result.headOption)
   }
 
-  def getLatestTopicOffset(topics: Seq[StreamTopicPartition]): Seq[TopicOffset] = {
-    val topicList: ListBuffer[TopicOffset] = new ListBuffer()
-      topics.foreach{topic =>
-        var pid = 0
-        while (pid < topic.partitions.getOrElse(1)) {
-          try {
-            val offset: Long = Await.result(getLatestOffset(topic.streamId, topic.topicName, pid), Duration.Inf).getOrElse(0)
-            if (offset >= 0) topicList.append(TopicOffset(topic.topicName, pid, offset))
-          } catch {
-            case e: Exception =>
-              riderLogger.error(s"Failed to get latest offset", e)
-          }
-          pid += 1
-        }
-      }
-    topicList
+  def getDistinctStreamTopicList(streamId: Long): Future[Seq[StreamTopicPartitionId]] ={
+    db.run(feedbackOffsetTable.filter(str => str.streamId === streamId).
+      map{case(str)=>(str.streamId,str.topicName,str.partitionNum ) <> (StreamTopicPartitionId.tupled, StreamTopicPartitionId.unapply)
+      }.distinct.result).mapTo[Seq[StreamTopicPartitionId]]
   }
 
-  def deleteHistory( pastNdays : String ) = super.deleteByFilter(_.feedbackTime <= pastNdays )
+  def getDistinctList: Future[Seq[IdStreamTopicPartitionId]] ={
+    db.run(feedbackOffsetTable.map{case(str)=>(str.id,str.streamId,str.topicName,str.partitionNum) <> (IdStreamTopicPartitionId.tupled, IdStreamTopicPartitionId.unapply) }
+      .distinct.result).mapTo[Seq[IdStreamTopicPartitionId]]
+  }
+
+
+  def deleteHistory( pastNdays : String, reservedIds: Seq[Long]) = {
+    super.deleteByFilter(str=> str.feedbackTime <= pastNdays && !(str.id.inSet(reservedIds)) )
+  }
 
 }

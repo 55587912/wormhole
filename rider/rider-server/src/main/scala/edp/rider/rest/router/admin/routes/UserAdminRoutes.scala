@@ -29,14 +29,14 @@ import edp.rider.module._
 import io.swagger.annotations._
 
 @Api(value = "/users", consumes = "application/json", produces = "application/json")
-@Path("/admin/users")
+@Path("/admin")
 class UserAdminRoutes(modules: ConfigurationModule with PersistenceModule with BusinessModule with RoutesModuleImpl) extends Directives {
 
-  lazy val routes: Route = getUserByFilterRoute ~ postUserRoute ~ putUserRoute ~ getUserByIdRoute
+  lazy val routes: Route = getUserByFilterRoute ~ postUserRoute ~ putUserRoute ~ getUserByIdRoute ~ getUserByProjectIdRoute
 
   lazy val basePath = "users"
 
-  @Path("/{id}")
+  @Path("/users/{id}")
   @ApiOperation(value = "get one user from system by id", notes = "", nickname = "", httpMethod = "GET")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "id", value = "user id", required = true, dataType = "integer", paramType = "path")
@@ -50,7 +50,7 @@ class UserAdminRoutes(modules: ConfigurationModule with PersistenceModule with B
   ))
   def getUserByIdRoute: Route = modules.userAdminService.getByIdRoute(basePath)
 
-
+  @Path("/users")
   @ApiOperation(value = "get all users", notes = "", nickname = "", httpMethod = "GET")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "visible", value = "true or false", required = false, dataType = "boolean", paramType = "query", allowMultiple = true),
@@ -61,14 +61,13 @@ class UserAdminRoutes(modules: ConfigurationModule with PersistenceModule with B
     new ApiResponse(code = 401, message = "authorization error"),
     new ApiResponse(code = 403, message = "user is not admin"),
     new ApiResponse(code = 501, message = "the request url is not supported"),
-    new ApiResponse(code = 409, message = "user already exists"),
     new ApiResponse(code = 451, message = "request process failed"),
     new ApiResponse(code = 500, message = "internal server error")
   ))
   def getUserByFilterRoute: Route = modules.userAdminService.getByFilterRoute(basePath)
 
-
-  @ApiOperation(value = "synchronize users to the system", notes = "", nickname = "", httpMethod = "POST")
+  @Path("/users")
+  @ApiOperation(value = "post user to the system", notes = "", nickname = "", httpMethod = "POST")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "user", value = "User object to be added", required = true, dataType = "edp.rider.rest.persistence.entities.SimpleUser", paramType = "body")
   ))
@@ -82,7 +81,7 @@ class UserAdminRoutes(modules: ConfigurationModule with PersistenceModule with B
   ))
   def postUserRoute: Route = modules.userAdminService.postRoute(basePath)
 
-
+  @Path("/users")
   @ApiOperation(value = "update user in the system", notes = "", nickname = "", httpMethod = "PUT")
   @ApiImplicitParams(Array(
     new ApiImplicitParam(name = "user", value = "User object to be updated", required = true, dataType = "edp.rider.rest.persistence.entities.User", paramType = "body")
@@ -96,5 +95,18 @@ class UserAdminRoutes(modules: ConfigurationModule with PersistenceModule with B
   ))
   def putUserRoute: Route = modules.userAdminService.putRoute(basePath)
 
+  @Path("/projects/{id}/users")
+  @ApiOperation(value = "get one project's users selected information from system by id", notes = "", nickname = "", httpMethod = "GET")
+  @ApiImplicitParams(Array(
+    new ApiImplicitParam(name = "id", value = "project id", required = true, dataType = "integer", paramType = "path")
+  ))
+  @ApiResponses(Array(
+    new ApiResponse(code = 200, message = "OK"),
+    new ApiResponse(code = 401, message = "authorization error"),
+    new ApiResponse(code = 403, message = "user is not admin"),
+    new ApiResponse(code = 451, message = "request process failed"),
+    new ApiResponse(code = 500, message = "internal server error")
+  ))
+  def getUserByProjectIdRoute: Route = modules.userAdminService.getByProjectIdRoute("projects")
 }
 

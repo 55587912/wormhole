@@ -23,12 +23,15 @@ import {
   LOAD_DATABASES_SUCCESS,
   ADD_DATABASE,
   ADD_DATABASE_SUCCESS,
+  ADD_DATABASE_ERROR,
   EDIT_DATABASE,
   EDIT_DATABASE_SUCCESS,
+  EDIT_DATABASE_ERROR,
   LOAD_DATABASES_INSTANCE,
   LOAD_DATABASES_INSTANCE_SUCCESS,
   LOAD_NAME_EXIST,
   LOAD_NAME_EXIST_SUCCESS,
+  LOAD_NAME_EXIST_ERROR,
   LOAD_SINGLE_DATABASE,
   LOAD_SINGLE_DATABASE_SUCCESS,
   GET_ERROR
@@ -53,12 +56,13 @@ export function databasesLoaded (databases, resolve) {
   }
 }
 
-export function addDatabase (database, resolve) {
+export function addDatabase (database, resolve, reject) {
   return {
     type: ADD_DATABASE,
     payload: {
       database,
-      resolve
+      resolve,
+      reject
     }
   }
 }
@@ -73,12 +77,23 @@ export function databaseAdded (result, resolve) {
   }
 }
 
-export function editDatabase (database, resolve) {
+export function databaseAddedError (result, reject) {
+  return {
+    type: ADD_DATABASE_ERROR,
+    payload: {
+      result,
+      reject
+    }
+  }
+}
+
+export function editDatabase (database, resolve, reject) {
   return {
     type: EDIT_DATABASE,
     payload: {
       database,
-      resolve
+      resolve,
+      reject
     }
   }
 }
@@ -93,24 +108,32 @@ export function databaseEdited (result, resolve) {
   }
 }
 
-export function loadDatabasesInstance (value, resolve, reject) {
+export function databaseEditedError (result, reject) {
   return {
-    type: LOAD_DATABASES_INSTANCE,
+    type: EDIT_DATABASE_ERROR,
     payload: {
-      value,
-      resolve,
+      result,
       reject
     }
   }
 }
 
-export function databasesInstanceLoaded (result, resolve, reject) {
+export function loadDatabasesInstance (value, resolve) {
+  return {
+    type: LOAD_DATABASES_INSTANCE,
+    payload: {
+      value,
+      resolve
+    }
+  }
+}
+
+export function databasesInstanceLoaded (result, resolve) {
   return {
     type: LOAD_DATABASES_INSTANCE_SUCCESS,
     payload: {
       result,
-      resolve,
-      reject
+      resolve
     }
   }
 }
@@ -126,12 +149,21 @@ export function loadNameExist (value, resolve, reject) {
   }
 }
 
-export function nameExistLoaded (result, resolve, reject) {
+export function nameExistLoaded (result, resolve) {
   return {
     type: LOAD_NAME_EXIST_SUCCESS,
     payload: {
       result,
-      resolve,
+      resolve
+    }
+  }
+}
+
+export function nameExistErrorLoaded (result, reject) {
+  return {
+    type: LOAD_NAME_EXIST_ERROR,
+    payload: {
+      result,
       reject
     }
   }

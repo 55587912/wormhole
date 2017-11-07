@@ -48,7 +48,7 @@ class FlowAppApi(flowDal: FlowDal, streamDal: StreamDal, projectDal: ProjectDal)
               session =>
                 if (session.roleType != "app") {
                   riderLogger.warn(s"${session.userId} has no permission to access it.")
-                  complete(Forbidden, getHeader(403, null))
+                  complete(OK, getHeader(403, null))
                 } else {
                   try {
                     prepare(None, Some(appFlow), session, projectId, Some(streamId)) match {
@@ -56,28 +56,27 @@ class FlowAppApi(flowDal: FlowDal, streamDal: StreamDal, projectDal: ProjectDal)
                         val flow = tuple._2.get
                         try {
                           autoRegisterTopic(streamId, flow.sourceNs, session.userId)
-                          val stream = streamDal.refreshStreamsByProjectId(Some(projectId), Some(streamId)).head.stream
+                          val stream = streamDal.getStreamDetail(Some(projectId), Some(streamId)).head.stream
                           if (startFlow(stream.id, stream.streamType, flow.id, flow.sourceNs, flow.sinkNs, flow.consumedProtocol, flow.sinkConfig.getOrElse(""), flow.tranConfig.getOrElse(""), flow.updateBy)) {
                             riderLogger.info(s"user ${session.userId} start flow ${flow.id} success.")
                             complete(OK, ResponseJson[AppFlowResponse](getHeader(200, null), AppFlowResponse(flow.id, flow.status)))
                           } else {
                             riderLogger.error(s"user ${session.userId} send flow ${flow.id} start directive failed")
                             flowDal.updateFlowStatus(flow.id, "failed")
-                            complete(UnavailableForLegalReasons, getHeader(451, null))
+                            complete(OK, getHeader(451, null))
                           }
                         } catch {
                           case ex: Exception =>
                             riderLogger.error(s"user ${session.userId} start flow ${flow.id} failed", ex)
                             flowDal.updateFlowStatus(flow.id, "failed")
-                            complete(UnavailableForLegalReasons, getHeader(451, null))
+                            complete(OK, getHeader(451, null))
                         }
-                      case Left(response) =>
-                        complete(Forbidden, response)
+                      case Left(response) => complete(OK, response)
                     }
                   } catch {
                     case ex: Exception =>
                       riderLogger.error(s"user ${session.userId} start flow $appFlow failed", ex)
-                      complete(UnavailableForLegalReasons, getHeader(451, null))
+                      complete(OK, getHeader(451, null))
                   }
                 }
 
@@ -94,23 +93,23 @@ class FlowAppApi(flowDal: FlowDal, streamDal: StreamDal, projectDal: ProjectDal)
           session =>
             if (session.roleType != "app") {
               riderLogger.warn(s"${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, null))
+              complete(OK, getHeader(403, null))
             } else {
               try {
                 val project = Await.result(projectDal.findById(projectId), minTimeOut)
                 if (project.isEmpty) {
                   riderLogger.error(s"user ${session.userId} request to stop project $projectId, stream $streamId, flow $flowId, but the project $projectId doesn't exist.")
-                  complete(Forbidden, getHeader(403, s"project $projectId doesn't exist", null))
+                  complete(OK, getHeader(403, s"project $projectId doesn't exist", null))
                 }
-                val streamInfo = streamDal.refreshStreamsByProjectId(Some(projectId), Some(streamId))
+                val streamInfo = streamDal.getStreamDetail(Some(projectId), Some(streamId))
                 if (streamInfo.isEmpty) {
                   riderLogger.error(s"user ${session.userId} request stop flow $flowId, but the stream $streamId doesn't exist")
-                  complete(Forbidden, getHeader(403, s"stream $streamId doesn't exist", null))
+                  complete(OK, getHeader(403, s"stream $streamId doesn't exist", null))
                 }
                 val flowSearch = Await.result(flowDal.findById(flowId), minTimeOut)
                 if (flowSearch.isEmpty) {
                   riderLogger.error(s"user ${session.userId} request stop flow $flowId, but it doesn't exist")
-                  complete(Forbidden, getHeader(403, s"flow $streamId doesn't exist", null))
+                  complete(OK, getHeader(403, s"flow $streamId doesn't exist", null))
                 }
                 val stream = streamInfo.head.stream
                 val flow = flowSearch.head
@@ -121,7 +120,7 @@ class FlowAppApi(flowDal: FlowDal, streamDal: StreamDal, projectDal: ProjectDal)
                     complete(OK, ResponseJson[AppFlowResponse](getHeader(200, session), AppFlowResponse(flowId, "stopped")))
                   } else {
                     riderLogger.error(s"user ${session.userId} send flow $flowId stop directive failed")
-                    complete(UnavailableForLegalReasons, getHeader(451, null))
+                    complete(OK, getHeader(451, null))
                   }
                 } else {
                   riderLogger.info(s"user ${session.userId} flow $flowId status is ${flow.status}, doesn't need to stop.")
@@ -130,7 +129,7 @@ class FlowAppApi(flowDal: FlowDal, streamDal: StreamDal, projectDal: ProjectDal)
               } catch {
                 case ex: Exception =>
                   riderLogger.error(s"user ${session.userId} stop flow $flowId failed", ex)
-                  complete(UnavailableForLegalReasons, getHeader(451, null))
+                  complete(OK, getHeader(451, null))
               }
             }
         }

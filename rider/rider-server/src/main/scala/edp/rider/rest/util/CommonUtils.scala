@@ -21,12 +21,14 @@
 
 package edp.rider.rest.util
 
+import com.alibaba.fastjson.JSON
+import edp.rider.common.RiderLogger
 import edp.wormhole.common.util.DateUtils._
 import edp.wormhole.common.util.DtFormat
 
 import scala.concurrent.duration._
 
-object CommonUtils {
+object CommonUtils extends RiderLogger {
 
   def currentSec = yyyyMMddHHmmssToString(currentyyyyMMddHHmmss, DtFormat.TS_DASH_SEC)
 
@@ -37,4 +39,48 @@ object CommonUtils {
   def minTimeOut = 180.seconds
 
   def maxTimeOut = 600.seconds
+
+  def streamSubmitTimeout = 120.seconds
+
+  val keyEqualValuePattern = "([a-zA-Z]+[a-zA-z0-9\\_\\-\\.]*=[a-zA-Z]+[a-zA-z0-9\\_\\-\\.]*(&[a-zA-Z]+[a-zA-z0-9\\_\\-\\.]*=[a-zA-Z]+[a-zA-z0-9\\_\\-\\.]*)*)".r.pattern
+
+  val streamSparkConfigPattern = "(.+=.+(,.+.+)*)".r.pattern
+
+  def formatResponseTimestamp(time: Option[String]): Option[String] = {
+    if (time.getOrElse("") == "") Some("")
+    else time
+  }
+
+  def formatRequestTimestamp(time: Option[String]): Option[String] = {
+    if (time.getOrElse("") == "")
+      null
+    else time
+  }
+
+  def isJson(str: String): Boolean = {
+    try {
+      if (str == "" || str == null)
+        true
+      else {
+        JSON.parseObject(str)
+        true
+      }
+    } catch {
+      case ex: Exception =>
+        riderLogger.error(s"$str is not json type", ex)
+        false
+    }
+  }
+
+  def isKeyEqualValue(str: String): Boolean = {
+    if (str == "" || str == null)
+      return true
+    keyEqualValuePattern.matcher(str.split(",").mkString("&")).matches()
+  }
+
+  def isStreamSparkConfig(str: String): Boolean = {
+    if (str == "" || str == null)
+      return true
+    streamSparkConfigPattern.matcher(str).matches()
+  }
 }

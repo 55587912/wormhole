@@ -32,12 +32,14 @@ export class ProjectUsersTable extends React.Component {
       selectedRowKeys: [],
       originUsers: [],
       currentUsers: [],
-      filterDropdownVisibleEmail: false,
-      searchTextEmail: '',
-      filterDropdownVisibleName: false,
-      searchTextName: '',
+
       filteredInfo: null,
-      sortedInfo: null
+      sortedInfo: null,
+
+      searchTextEmail: '',
+      filterDropdownVisibleEmail: false,
+      searchTextName: '',
+      filterDropdownVisibleName: false
     }
   }
 
@@ -129,6 +131,7 @@ export class ProjectUsersTable extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Email"
             value={this.state.searchTextEmail}
             onChange={this.onInputChange('searchTextEmail')}
@@ -138,7 +141,9 @@ export class ProjectUsersTable extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleEmail,
-      onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleEmail: visible })
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleEmail: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Name',
       dataIndex: 'name',
@@ -154,6 +159,7 @@ export class ProjectUsersTable extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Name"
             value={this.state.searchTextName}
             onChange={this.onInputChange('searchTextName')}
@@ -163,7 +169,9 @@ export class ProjectUsersTable extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleName,
-      onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleName: visible })
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleName: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Role Type',
       dataIndex: 'roleType',

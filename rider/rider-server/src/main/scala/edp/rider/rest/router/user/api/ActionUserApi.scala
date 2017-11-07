@@ -44,19 +44,11 @@ class ActionUserApi(streamDal: StreamDal, flowDal: FlowDal) extends Directives w
               session =>
                 if (session.roleType != "user") {
                   riderLogger.warn(s"${session.userId} has no permission to access it.")
-                  complete(Forbidden, getHeader(403, session))
+                  complete(OK, getHeader(403, session))
                 }
                 else {
                   if (session.projectIdList.contains(id)) {
-                    if (actionClass.flowIds == "") {
-                      actionClass.action match {
-                        case "start" =>
-                        case "stop" =>
-                        case "refresh" =>
-                        case "update" =>
-                      }
-                      complete(OK, getHeader(200, session))
-                    } else if (actionClass.flowIds != "") {
+                    if (actionClass.flowIds != "") {
                       riderLogger.info(s"user ${session.userId} refresh streams.")
                       onComplete(flowDal.flowAction(actionClass, session.userId)) {
                         case Success(flowStreams) =>
@@ -64,21 +56,19 @@ class ActionUserApi(streamDal: StreamDal, flowDal: FlowDal) extends Directives w
                           complete(OK, ResponseSeqJson[FlowStream](getHeader(200, session), flowStreams))
                         case Failure(ex) =>
                           riderLogger.error(s"user ${session.userId} ${actionClass.action} ${actionClass.flowIds} failed", ex)
-                          complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                          complete(OK, getHeader(451, ex.getMessage, session))
                       }
-
                     } else {
                       riderLogger.info(s"user ${session.userId} do nothing on streams and flows.")
                       complete(OK, ResponseJson[String](getHeader(200, session), ""))
                     }
                   } else {
                     riderLogger.error(s"user ${session.userId} doesn't have permission to access the project $id.")
-                    complete(Forbidden, getHeader(403, session))
+                    complete(OK, getHeader(403, session))
                   }
                 }
             }
         }
       }
-     
   }
 }

@@ -40,8 +40,10 @@ import Modal from 'antd/lib/modal'
 import message from 'antd/lib/message'
 import DatePicker from 'antd/lib/date-picker'
 const { RangePicker } = DatePicker
+import { uuid } from '../../utils/util'
 
-import {loadUserStreams, loadAdminSingleStream, loadAdminAllStreams, operateStream, startOrRenewStream, loadOffset, chuckAwayTopic, editTopics, loadLogsInfo, loadAdminLogsInfo} from './action'
+import {loadUserStreams, loadAdminSingleStream, loadAdminAllStreams, operateStream, startOrRenewStream, deleteStream, loadStreamDetail, loadOffset, loadLogsInfo, loadAdminLogsInfo} from './action'
+import {loadSingleUdf} from '../Udf/action'
 import {selectStreams} from './selectors'
 
 export class Manager extends React.Component {
@@ -60,12 +62,13 @@ export class Manager extends React.Component {
       selectedRowKeys: [],
 
       editModalVisible: false,
-      editModalStatus: '',
       logsModalVisible: false,
       startModalVisible: false,
-      showStreamOffset: [],
+      showStreamdetails: null,
       streamStartFormData: [],
+      topicInfoModal: '',
       streamIdGeted: 0,
+      actionType: '',
 
       filteredInfo: null,
       sortedInfo: null,
@@ -79,9 +82,8 @@ export class Manager extends React.Component {
       filterDropdownVisibleName: false,
       searchTextSparkAppid: '',
       filterDropdownVisibleSparkAppid: false,
-      searchTextKafkaName: '',
-      filterDropdownVisibleKafkaName: false,
-
+      searchTextInstance: '',
+      filterDropdownVisibleInstance: false,
       filterDatepickerShown: false,
       startTimeText: '',
       endTimeText: '',
@@ -96,7 +98,7 @@ export class Manager extends React.Component {
       logsProjectId: 0,
       logsStreamId: 0,
 
-      actionType: ''
+      udfVals: []
     }
   }
 
@@ -109,14 +111,28 @@ export class Manager extends React.Component {
       let originStreams = []
       if (props.streamClassHide === undefined) {
         originStreams = props.streams.map(s => {
-          const responseOriginStream = Object.assign({}, { kafkaConnection: s.kafkaConnection }, { kafkaName: s.kafkaName }, {disableActions: s.disableActions}, {projectName: s.projectName}, s.stream, {topicInfo: s.topicInfo})
+          const responseOriginStream = Object.assign({}, s.stream, {
+            kafkaConnection: s.kafkaConnection,
+            kafkaName: s.kafkaName,
+            disableActions: s.disableActions,
+            projectName: s.projectName,
+            topicInfo: s.topicInfo
+          })
           responseOriginStream.key = responseOriginStream.id
           responseOriginStream.visible = false
           return responseOriginStream
         })
       } else if (props.streamClassHide === 'hide') {
         originStreams = props.streams.map(s => {
-          const responseOriginStream = Object.assign({}, { kafkaConnection: s.kafkaConnection }, { kafkaName: s.kafkaName }, {disableActions: s.disableActions}, s.stream, {topicInfo: s.topicInfo})
+          const responseOriginStream = Object.assign({}, s.stream, {
+            disableActions: s.disableActions,
+            topicInfo: s.topicInfo,
+            instance: s.kafkaInfo.instance,
+            connUrl: s.kafkaInfo.connUrl,
+            projectName: s.projectName,
+            currentUdf: s.currentUdf,
+            usingUdf: s.usingUdf
+          })
           responseOriginStream.key = responseOriginStream.id
           responseOriginStream.visible = false
           return responseOriginStream
@@ -156,16 +172,21 @@ export class Manager extends React.Component {
   }
 
   handleVisibleChange = (stream) => (visible) => {
-    // visible=true时，调接口，获取 topic 最新数据
+    // visible=true时，调接口，获取最新详情
     if (visible) {
       this.setState({
         visible
       }, () => {
-        // 频繁使用的组件，手动清除数据，避免出现闪现上一条数据
-        this.props.onChuckAwayTopic()
-        this.props.onLoadOffset(this.props.projectIdGeted, stream.id, (result) => {
+        let roleType = ''
+        if (localStorage.getItem('loginRoleType') === 'admin') {
+          roleType = 'admin'
+        } else if (localStorage.getItem('loginRoleType') === 'user') {
+          roleType = 'user'
+        }
+
+        this.props.onLoadStreamDetail(stream.projectId, stream.id, roleType, (result) => {
           this.setState({
-            showStreamOffset: result
+            showStreamdetails: result
           })
         })
       })
@@ -173,9 +194,9 @@ export class Manager extends React.Component {
   }
 
   updateStream = (record) => (e) => {
-    this.loadOffsetData(record)
     this.setState({
-      actionType: 'renew'
+      actionType: 'renew',
+      startModalVisible: true
     })
   }
 
@@ -184,19 +205,61 @@ export class Manager extends React.Component {
    * @param record
    */
   onShowEditStart = (record) => (e) => {
-    this.loadOffsetData(record)
     this.setState({
-      actionType: 'start'
+      actionType: 'start',
+      startModalVisible: true,
+      streamIdGeted: record.id
+    })
+    // 单条查询接口获得回显的topic Info和UDF信息
+    // 与user UDF table相同的接口获得全部的UDF
+    this.props.onLoadStreamDetail(this.props.projectIdGeted, record.id, 'user', (result) => {
+      this.setState({
+        topicInfoModal: result.topicInfo.length === 0 ? 'hide' : '',
+        streamStartFormData: result.topicInfo
+      })
+    })
+
+    this.props.onLoadSingleUdf(this.props.projectIdGeted, 'user', (result) => {
+      const allOptionVal = {
+        createBy: 1,
+        createTime: '',
+        desc: '',
+        fullClassName: '',
+        functionName: '全选',
+        id: -1,
+        jarName: '',
+        pubic: false,
+        updateBy: 1,
+        updateTime: ''
+      }
+      result.unshift(allOptionVal)
+      this.setState({
+        udfVals: result
+      })
     })
   }
 
-  loadOffsetData (record) {
-    this.props.onLoadOffset(this.props.projectIdGeted, record.id, (result) => {
-      this.setState({
-        startModalVisible: true,
-        streamIdGeted: record.id,
-        streamStartFormData: result
-      })
+  /**
+   * 查询最新的 Offset
+   * @param e
+   */
+  queryLastestoffset = (e) => {
+    const { projectIdGeted } = this.props
+    const { streamIdGeted } = this.state
+
+    const requestVal = {
+      id: projectIdGeted,
+      streamId: streamIdGeted
+    }
+    this.props.onLoadOffset(requestVal, (result) => {
+      for (let k = 0; k < result.length; k++) {
+        const partitionAndOffset = result[k].partitionOffsets.split(',')
+        for (let j = 0; j < partitionAndOffset.length; j++) {
+          this.streamStartForm.setFieldsValue({
+            [`latest_${result[k].id}_${j}`]: partitionAndOffset[j].substring(partitionAndOffset[j].indexOf(':') + 1)
+          })
+        }
+      }
     })
   }
 
@@ -205,99 +268,112 @@ export class Manager extends React.Component {
    * @param e
    */
   handleEditStartOk = (e) => {
-    const { actionType, streamIdGeted, streamStartFormData } = this.state
+    const { actionType, streamIdGeted, streamStartFormData, udfVals } = this.state
     const { projectIdGeted } = this.props
 
     this.streamStartForm.validateFieldsAndScroll((err, values) => {
       if (!err) {
-        const mergedData = streamStartFormData.map((i) => {
-          const offsetArr = []
-          for (let r = 0; r < i.partition; r++) {
-            const offsetArrTemp = values[`${i.id}_${r}`]
-            if (offsetArrTemp === '') {
-              message.warning('Offset 不能为空！', 3)
+        let requestStartVal = {}
+        if (streamStartFormData.length === 0) {
+          if (values.udfs === undefined || values.udfs.length === 0) {
+            requestStartVal = {}
+          } else {
+            if (values.udfs[0] === '-1') {
+              // 全选
+              const udfValsOrigin = udfVals.filter(k => k.id !== -1)
+              requestStartVal = {
+                udfInfo: udfValsOrigin.map(p => p.id)
+              }
             } else {
-              offsetArr.push(`${r}:${offsetArrTemp}`)
+              requestStartVal = {
+                udfInfo: values.udfs
+              }
             }
           }
-          const offsetVal = offsetArr.join(',')
+        } else {
+          const mergedData = streamStartFormData.map((i) => {
+            const parOffTemp = i.partitionOffsets
+            const partitionTemp = parOffTemp.split(',')
 
-          const robj = {
-            id: i.id,
-            streamId: streamIdGeted,
-            nsInstanceId: i.nsInstanceId,
-            nsDatabaseId: i.nsDatabaseId,
-            partitionOffsets: offsetVal,
-            rate: Number(values[`${i.id}`]),
-            zookeeper: i.zookeeper,
-            active: i.active,
-            createTime: i.createTime,
-            createBy: i.createBy,
-            updateTime: i.updateTime,
-            updateBy: i.updateBy
-          }
-          return robj
-        })
-
-        new Promise((resolve) => {
-          this.props.onEditTopics(projectIdGeted, streamIdGeted, mergedData, (result) => {
-            resolve(result)
-            this.setState({
-              modalLoading: true
-            })
-          })
-        })
-          .then((result) => {
-            let actionTypeRequest = ''
-            let actionTypeMsg = ''
-            if (actionType === 'start') {
-              actionTypeRequest = 'start'
-              actionTypeMsg = 'Start'
-            } else if (actionType === 'renew') {
-              actionTypeRequest = 'renew'
-              actionTypeMsg = 'Renew'
+            const offsetArr = []
+            for (let r = 0; r < partitionTemp.length; r++) {
+              const offsetArrTemp = values[`${i.id}_${r}`]
+              if (offsetArrTemp === '') {
+                message.warning('Offset 不能为空！', 3)
+              } else {
+                offsetArr.push(`${r}:${offsetArrTemp}`)
+              }
             }
+            const offsetVal = offsetArr.join(',')
 
-            const requestVal = []
-            result.map(i => {
-              requestVal.push({
-                id: i.id,
-                name: i.name,
-                rate: i.rate,
-                partitionOffsets: i.partitionOffsets,
-                zookeeper: i.zookeeper
-              })
-              return i
-            })
-
-            this.props.onStartOrRenewStream(projectIdGeted, streamIdGeted, requestVal, actionTypeRequest, () => {
-              this.setState({
-                startModalVisible: false,
-                streamStartFormData: [],
-                modalLoading: false
-              })
-              message.success(`${actionTypeMsg} 成功！`, 3)
-            }, (result) => {
-              message.error(`操作失败：${result}`, 3)
-              this.setState({
-                modalLoading: false
-              })
-            })
+            const robj = {
+              id: i.id,
+              partitionOffsets: offsetVal,
+              rate: values[i.rate]
+            }
+            return robj
           })
+
+          if (values.udfs === undefined || values.udfs.length === 0) {
+            requestStartVal = {
+              topicInfo: mergedData
+            }
+          } else {
+            requestStartVal = {
+              udfInfo: values.udfs,
+              topicInfo: mergedData
+            }
+          }
+        }
+
+        let actionTypeRequest = ''
+        let actionTypeMsg = ''
+        if (actionType === 'start') {
+          actionTypeRequest = 'start'
+          actionTypeMsg = '启动成功！'
+        } else if (actionType === 'renew') {
+          actionTypeRequest = 'renew'
+          actionTypeMsg = '生效！'
+        }
+
+        this.props.onStartOrRenewStream(projectIdGeted, streamIdGeted, requestStartVal, actionTypeRequest, () => {
+          this.setState({
+            startModalVisible: false,
+            streamStartFormData: [],
+            modalLoading: false
+          })
+          message.success(actionTypeMsg, 3)
+        }, (result) => {
+          message.error(`操作失败：${result}`, 3)
+          this.setState({
+            modalLoading: false
+          })
+        })
       }
     })
   }
 
   handleEditStartCancel = (e) => {
     this.setState({
-      startModalVisible: false
+      startModalVisible: false,
+      streamStartFormData: []
     })
     this.streamStartForm.resetFields()
   }
 
+  // stop
   stopStreamBtn = (record, action) => (e) => {
     this.props.onOperateStream(this.props.projectIdGeted, record.id, 'stop', () => {
-      message.success('Stop 成功！', 3)
+      message.success('停止成功！', 3)
+    }, (result) => {
+      message.error(`操作失败：${result}`, 3)
+    })
+  }
+
+  // delete
+  deleteStreambtn = (record, action) => (e) => {
+    this.props.onDeleteStream(this.props.projectIdGeted, record.id, 'delete', () => {
+      message.success('删除成功！', 3)
     }, (result) => {
       message.error(`操作失败：${result}`, 3)
     })
@@ -444,7 +520,7 @@ export class Manager extends React.Component {
   }
 
   render () {
-    const { refreshStreamLoading, refreshStreamText } = this.state
+    const { refreshStreamLoading, refreshStreamText, showStreamdetails } = this.state
     const { className, onShowAddStream, onShowEditStream, streamClassHide } = this.props
 
     let {
@@ -469,6 +545,7 @@ export class Manager extends React.Component {
             <Row>
               <Col span={9}>
                 <Input
+                  ref={ele => { this.searchInput = ele }}
                   placeholder="Start ID"
                   onChange={this.onInputChange('searchStartIdText')}
                 />
@@ -490,7 +567,9 @@ export class Manager extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleId,
-      onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleId: visible })
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleId: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Project',
       dataIndex: 'projectName',
@@ -507,6 +586,7 @@ export class Manager extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Project Name"
             value={this.state.searchTextStreamProject}
             onChange={this.onInputChange('searchTextStreamProject')}
@@ -518,7 +598,9 @@ export class Manager extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleStreamProject,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleStreamProject: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleStreamProject: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Name',
       dataIndex: 'name',
@@ -534,6 +616,7 @@ export class Manager extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Name"
             value={this.state.searchTextName}
             onChange={this.onInputChange('searchTextName')}
@@ -545,7 +628,9 @@ export class Manager extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleName,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleName: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleName: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'App Id',
       dataIndex: 'sparkAppid',
@@ -561,6 +646,7 @@ export class Manager extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="App Id"
             value={this.state.searchTextSparkAppid}
             onChange={this.onInputChange('searchTextSparkAppid')}
@@ -572,7 +658,9 @@ export class Manager extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleSparkAppid,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleSparkAppid: visible})
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleSparkAppid: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Status',
       dataIndex: 'status',
@@ -619,7 +707,7 @@ export class Manager extends React.Component {
       title: 'Type',
       dataIndex: 'streamType',
       key: 'streamType',
-      className: 'text-align-center',
+      // className: 'text-align-center',
       sorter: (a, b) => a.streamType < b.streamType ? -1 : 1,
       sortOrder: sortedInfo.columnKey === 'streamType' && sortedInfo.order,
       filters: [
@@ -631,31 +719,34 @@ export class Manager extends React.Component {
       onFilter: (value, record) => record.streamType.includes(value)
     }, {
       title: 'Kafka',
-      dataIndex: 'kafkaName',
-      key: 'kafkaName',
+      dataIndex: 'instance',
+      key: 'instance',
       sorter: (a, b) => {
-        if (typeof a.kafkaName === 'object') {
-          return a.kafkaNameOrigin < b.kafkaNameOrigin ? -1 : 1
+        if (typeof a.instance === 'object') {
+          return a.instanceOrigin < b.instanceOrigin ? -1 : 1
         } else {
-          return a.kafkaName < b.kafkaName ? -1 : 1
+          return a.instance < b.instance ? -1 : 1
         }
       },
-      sortOrder: sortedInfo.columnKey === 'kafkaName' && sortedInfo.order,
+      sortOrder: sortedInfo.columnKey === 'instance' && sortedInfo.order,
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Kafka"
-            value={this.state.searchTextKafkaName}
-            onChange={this.onInputChange('searchTextKafkaName')}
-            onPressEnter={this.onSearch('kafkaName', 'searchTextKafkaName', 'filterDropdownVisibleKafkaName')}
+            value={this.state.searchTextInstance}
+            onChange={this.onInputChange('searchTextInstance')}
+            onPressEnter={this.onSearch('instance', 'searchTextInstance', 'filterDropdownVisibleInstance')}
           />
           <Button
             type="primary"
-            onClick={this.onSearch('kafkaName', 'searchTextKafkaName', 'filterDropdownVisibleKafkaName')}>Search</Button>
+            onClick={this.onSearch('instance', 'searchTextInstance', 'filterDropdownVisibleInstance')}>Search</Button>
         </div>
       ),
-      filterDropdownVisible: this.state.filterDropdownVisibleKafkaName,
-      onFilterDropdownVisibleChange: visible => this.setState({filterDropdownVisibleKafkaName: visible})
+      filterDropdownVisible: this.state.filterDropdownVisibleInstance,
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleInstance: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Start Time',
       dataIndex: 'startedTime',
@@ -785,28 +876,8 @@ export class Manager extends React.Component {
             strStop = strStopDisabled
           }
 
-          // s.id = uuid()
-          const topicDetail = this.state.showStreamOffset
-            ? this.state.showStreamOffset.map(s => (<li key={s.id}>
-              <strong>Topic Name：</strong>{s.name}<strong>；Offset：</strong>{s.partitionOffsets}</li>)
-            )
-            : null
-
           streamActionSelect = (
             <span>
-              <Tooltip title="查看 Topic">
-                <Popover
-                  placement="left"
-                  content={<div>{topicDetail}</div>}
-                  title={<h3>Topic</h3>}
-                  trigger="click"
-                  onVisibleChange={this.handleVisibleChange(stream)}>
-                  <Button shape="circle" type="ghost">
-                    <i className="iconfont icon-topiconresourcelist"></i>
-                  </Button>
-                </Popover>
-              </Tooltip>
-
               <Tooltip title="修改">
                 <Button icon="edit" shape="circle" type="ghost" onClick={onShowEditStream(record)}></Button>
               </Tooltip>
@@ -820,7 +891,70 @@ export class Manager extends React.Component {
               <Tooltip title="生效">
                 <Button icon="check" shape="circle" type="ghost" onClick={this.updateStream(record, 'renew')} disabled={streamRenewDisabled}></Button>
               </Tooltip>
+
+              <Popconfirm placement="bottom" title="确定删除吗？" okText="Yes" cancelText="No" onConfirm={this.deleteStreambtn(record, 'delete')}>
+                <Tooltip title="删除">
+                  <Button icon="delete" shape="circle" type="ghost"></Button>
+                </Tooltip>
+              </Popconfirm>
             </span>
+          )
+        }
+
+        let streamDetailContent = ''
+        if (showStreamdetails) {
+          const detailTemp = showStreamdetails.stream
+
+          const topicTemp = showStreamdetails.topicInfo
+          const topicFinal = topicTemp.map(s => (
+            <li key={s.id}>
+              <strong>Topic Name：</strong>{s.name}
+              <strong>；Partition Offsets：</strong>{s.partitionOffsets}
+              <strong>；Rate：</strong>{s.rate}
+            </li>
+          ))
+
+          const currentudfTemp = showStreamdetails.currentUdf
+          const currentUdfFinal = currentudfTemp.length !== 0
+            ? currentudfTemp.map(s => (
+              <li key={s.id}>
+                <strong>Function Name：</strong>{s.functionName}
+                <strong>；Full Class Name：</strong>{s.fullClassName}
+                <strong>；Jar Name：</strong>{s.jarName}
+              </li>
+              ))
+            : null
+
+          const usingUdfTemp = showStreamdetails.usingUdf
+          const usingUdfTempFinal = usingUdfTemp.length !== 0
+            ? usingUdfTemp.map(s => (
+              <li key={uuid()}>
+                <strong>Function Name：</strong>{s.functionName}
+                <strong>；Full Class Name：</strong>strong>{s.fullClassName}
+                <strong>；Jar Name：</strong>{s.jarName}
+              </li>
+            ))
+            : null
+
+          streamDetailContent = (
+            <div className="stream-detail">
+              <p><strong>   Project Id：</strong>{detailTemp.projectId}</p>
+              <p><strong>   Topic Info：</strong>{topicFinal}</p>
+              <p><strong>   Current Udf：</strong>{currentUdfFinal}</p>
+              <p><strong>   Using Udf：</strong>{usingUdfTempFinal}</p>
+
+              <p><strong>   Description：</strong>{detailTemp.desc}</p>
+              <p><strong>   Disable Actions：</strong>{showStreamdetails.disableActions}</p>
+
+              <p><strong>   Create Time：</strong>{detailTemp.createTime}</p>
+              <p><strong>   Create By：</strong>{detailTemp.createBy}</p>
+              <p><strong>   Update Time：</strong>{detailTemp.updateTime}</p>
+              <p><strong>   Update By：</strong>{detailTemp.updateBy}</p>
+
+              <p><strong>   Launch Config：</strong>{detailTemp.launchConfig}</p>
+              <p><strong>   spark Config：</strong>{detailTemp.sparkConfig}</p>
+              <p><strong>   start Config：</strong>{detailTemp.startConfig}</p>
+            </div>
           )
         }
 
@@ -829,21 +963,10 @@ export class Manager extends React.Component {
             <Tooltip title="查看详情">
               <Popover
                 placement="left"
-                content={<div style={{ width: '600px', overflowY: 'auto', height: '260px', overflowX: 'auto' }}>
-                  <p><strong>   Project Id：</strong>{record.projectId}</p>
-                  <p><strong>   Description：</strong>{record.desc}</p>
-                  <p><strong>   Kafka Connection：</strong>{record.kafkaConnection}</p>
-                  <p><strong>   Create Time：</strong>{record.createTime}</p>
-                  <p><strong>   Create By：</strong>{record.createBy}</p>
-                  <p><strong>   Update Time：</strong>{record.updateTime}</p>
-                  <p><strong>   Update By：</strong>{record.updateBy}</p>
-                  <p><strong>   Disable Actions：</strong>{record.disableActions}</p>
-                  <p><strong>   Launch Config：</strong>{record.launchConfig}</p>
-                  <p><strong>   spark Config：</strong>{record.sparkConfig}</p>
-                  <p><strong>   start Config：</strong>{record.startConfig}</p>
-                </div>}
+                content={streamDetailContent}
                 title={<h3>详情</h3>}
-                trigger="click">
+                trigger="click"
+                onVisibleChange={this.handleVisibleChange(stream)}>
                 <Button icon="file-text" shape="circle" type="ghost"></Button>
               </Popover>
             </Tooltip>
@@ -879,6 +1002,7 @@ export class Manager extends React.Component {
       ? (
         <StreamStartForm
           data={this.state.streamStartFormData}
+          udfValsOption={this.state.udfVals}
           ref={(f) => { this.streamStartForm = f }}
         />
       )
@@ -919,9 +1043,17 @@ export class Manager extends React.Component {
         <Modal
           title={`确定${this.state.actionType === 'start' ? '开始' : '生效'}吗？`}
           visible={startModalVisible}
-          wrapClassName="ant-modal-small"
+          wrapClassName="stream-start-form-style"
           onCancel={this.handleEditStartCancel}
           footer={[
+            <Button
+              className={`query-offset-btn ${this.state.topicInfoModal}`}
+              key="query"
+              size="large"
+              onClick={this.queryLastestoffset}
+            >
+              查看最新 Offset
+            </Button>,
             <Button
               key="cancel"
               size="large"
@@ -975,13 +1107,14 @@ Manager.propTypes = {
   onLoadAdminAllStreams: React.PropTypes.func,
   onShowAddStream: React.PropTypes.func,
   onOperateStream: React.PropTypes.func,
+  onDeleteStream: React.PropTypes.func,
   onStartOrRenewStream: React.PropTypes.func,
+  onLoadStreamDetail: React.PropTypes.func,
   onLoadOffset: React.PropTypes.func,
-  onChuckAwayTopic: React.PropTypes.func,
   onLoadLogsInfo: React.PropTypes.func,
   onLoadAdminLogsInfo: React.PropTypes.func,
   onShowEditStream: React.PropTypes.func,
-  onEditTopics: React.PropTypes.func
+  onLoadSingleUdf: React.PropTypes.func
 }
 
 export function mapDispatchToProps (dispatch) {
@@ -990,12 +1123,13 @@ export function mapDispatchToProps (dispatch) {
     onLoadAdminAllStreams: (resolve) => dispatch(loadAdminAllStreams(resolve)),
     onLoadAdminSingleStream: (projectId, resolve) => dispatch(loadAdminSingleStream(projectId, resolve)),
     onOperateStream: (projectId, id, action, resolve, reject) => dispatch(operateStream(projectId, id, action, resolve, reject)),
+    onDeleteStream: (projectId, id, action, resolve, reject) => dispatch(deleteStream(projectId, id, action, resolve, reject)),
     onStartOrRenewStream: (projectId, id, topicResult, action, resolve, reject) => dispatch(startOrRenewStream(projectId, id, topicResult, action, resolve, reject)),
-    onLoadOffset: (projectId, streamId, resolve) => dispatch(loadOffset(projectId, streamId, resolve)),
-    onChuckAwayTopic: () => dispatch(chuckAwayTopic()),
-    onEditTopics: (projectId, streamId, values, resolve) => dispatch(editTopics(projectId, streamId, values, resolve)),
+    onLoadStreamDetail: (projectId, streamId, roleType, resolve) => dispatch(loadStreamDetail(projectId, streamId, roleType, resolve)),
+    onLoadOffset: (values, resolve) => dispatch(loadOffset(values, resolve)),
     onLoadLogsInfo: (projectId, streamId, resolve) => dispatch(loadLogsInfo(projectId, streamId, resolve)),
-    onLoadAdminLogsInfo: (projectId, streamId, resolve) => dispatch(loadAdminLogsInfo(projectId, streamId, resolve))
+    onLoadAdminLogsInfo: (projectId, streamId, resolve) => dispatch(loadAdminLogsInfo(projectId, streamId, resolve)),
+    onLoadSingleUdf: (projectId, roleType, resolve) => dispatch(loadSingleUdf(projectId, roleType, resolve))
   }
 }
 

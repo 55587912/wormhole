@@ -25,6 +25,7 @@ import {
   LOAD_INSTANCES,
   ADD_INSTANCE,
   LOAD_INSTANCES_INPUT_VALUE,
+  LOAD_INSTANCES_EXIT,
   LOAD_SINGLE_INSTANCE,
   EDIT_INSTANCE
 } from './constants'
@@ -32,6 +33,9 @@ import {
   instancesLoaded,
   instanceAdded,
   instanceInputValueLoaded,
+  instanceInputValueErrorLoaded,
+  instanceExitLoaded,
+  instanceExitErrorLoaded,
   singleInstanceLoaded,
   instanceEdited,
   getError
@@ -64,7 +68,8 @@ export function* addInstance ({ payload }) {
       data: {
         connUrl: payload.instance.connectionUrl,
         desc: payload.instance.description === undefined ? '' : payload.instance.description,
-        nsSys: payload.instance.instanceDataSystem
+        nsSys: payload.instance.instanceDataSystem,
+        nsInstance: payload.instance.instance
       }
     })
     yield put(instanceAdded(result.payload, payload.resolve))
@@ -116,8 +121,9 @@ export function* getInstanceInputValue ({ payload }) {
       method: 'get',
       url: `${api.instance}?type=${payload.value.type}&conn_url=${payload.value.conn_url}`
     })
+
     if (result.code === 409 || result.code === 400) {
-      yield put(instanceInputValueLoaded(result.msg, payload.reject))
+      yield put(instanceInputValueErrorLoaded(result.msg, payload.reject))
     } else {
       yield put(instanceInputValueLoaded(result.payload, payload.resolve))
     }
@@ -130,10 +136,31 @@ export function* getInstanceInputValueWatcher () {
   yield throttle(800, LOAD_INSTANCES_INPUT_VALUE, getInstanceInputValue)
 }
 
+export function* getInstanceValExit ({ payload }) {
+  try {
+    const result = yield call(request, {
+      method: 'get',
+      url: `${api.instance}?type=${payload.value.type}&nsInstance=${payload.value.nsInstance}`
+    })
+    if (result.code === 409) {
+      yield put(instanceExitErrorLoaded(result.msg, payload.reject))
+    } else {
+      yield put(instanceExitLoaded(payload.result, payload.resolve))
+    }
+  } catch (err) {
+    yield put(getError(err))
+  }
+}
+
+export function* getInstanceValExitWatcher () {
+  yield throttle(800, LOAD_INSTANCES_EXIT, getInstanceValExit)
+}
+
 export default [
   getInstancesWatcher,
   addInstanceWatcher,
   singleInstanceWatcher,
   editInstanceWatcher,
-  getInstanceInputValueWatcher
+  getInstanceInputValueWatcher,
+  getInstanceValExitWatcher
 ]

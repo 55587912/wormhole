@@ -46,7 +46,7 @@ object BatchJobStarter extends App with EdpLogging {
   val sinkConfig = batchJobConfig.sinkConfig
 
   val transformationList: Array[String] = if (transformationConfig.isDefined && transformationConfig.get.action.isDefined)
-    new String(new sun.misc.BASE64Decoder().decodeBuffer(transformationConfig.get.action.get.toString)).split(";").map(_.trim) else null
+    new String(new sun.misc.BASE64Decoder().decodeBuffer(transformationConfig.get.action.get.toString.split(" ").mkString(""))).split(";").map(_.trim) else null
   if (transformationList != null) transformationList.foreach(c =>
     assert(c.startsWith("spark_sql") || c.startsWith("custom_class"), "your actions are not started with spark_sql or custom_class."))
   val sparkConf = new SparkConf()
@@ -80,9 +80,9 @@ object BatchJobStarter extends App with EdpLogging {
     val sinkClassFullName = sinkConfig.classFullName.get
     val sinkNamespace = sinkConfig.sinkNamespace
     val sourceNamespace = sourceConfig.sourceNamespace
-    val specialConfig: Option[String] = if (sinkConfig.specialConfig.isDefined) Some(new String(new sun.misc.BASE64Decoder().decodeBuffer(sinkConfig.specialConfig.get.toString))) else None
+    val specialConfig: Option[String] = if (sinkConfig.specialConfig.isDefined) Some(new String(new sun.misc.BASE64Decoder().decodeBuffer(sinkConfig.specialConfig.get.toString.split(" ").mkString("")))) else None
     val sinkConnectionConfig = sinkConfig.connectionConfig
-    val sinkProcessConfig = SinkProcessConfig(sinkConfig.tableKeys,specialConfig,sinkClassFullName,1,1)
+    val sinkProcessConfig = SinkProcessConfig("",sinkConfig.tableKeys,specialConfig,sinkClassFullName,1,1)
     outPutTransformDf.foreachPartition(partition =>{
       //println("!!!!TaskContext.getPartitionId:" + TaskContext.getPartitionId)
       val sendList = ListBuffer.empty[Seq[String]]

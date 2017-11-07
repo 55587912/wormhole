@@ -40,9 +40,7 @@ export class WorkbenchStreamForm extends React.PureComponent {
   constructor (props) {
     super(props)
     this.state = {
-      streamMode: '',
-      configColor: '',
-      configIcon: 'minus-circle-o'
+      streamMode: ''
     }
   }
 
@@ -53,16 +51,10 @@ export class WorkbenchStreamForm extends React.PureComponent {
   }
 
   // 验证 stream name 是否存在
-  onNameInputChange = (e) => {
-    this.props.onInitStreamNameValue(e.target.value)
-  }
+  onNameInputChange = (e) => this.props.onInitStreamNameValue(e.target.value)
 
   onStreamTypeSelect = (e) => {
     // console.log('val', e.target.value)
-  }
-
-  onKafkaTypeSelect = (val) => {
-    this.props.onKafkaTypeSelect(val)
   }
 
   forceCheckSave = (rule, value, callback) => {
@@ -74,12 +66,27 @@ export class WorkbenchStreamForm extends React.PureComponent {
     }
   }
 
-  handleTopicsChange = (value) => {
-    // console.log('value', value)
+  // handleTopicsChange = (value) => {
+    // const { topicsValues } = this.props
+    // if (value === '全选') {
+    //   this.setState({
+    //     topicChildren: ['全选']
+    //   })
+    // } else {
+    //   for (let i = 0; i < topicsValues.length; i++) {
+    //     this.setState({
+    //       topicChildren: this.state.topicChildren.push(<Option key={topicsValues[i].id} value={`${topicsValues[i].id}`}>{topicsValues[i].name}</Option>)
+    //     })
+    //   }
+    // }
+  // }
+
+  selectTopic = (value) => {
+    console.log('va', value)
   }
 
   render () {
-    const { isWormhole, onShowConfigModal, streamConfigCheck, kafkaValues, topicsValues } = this.props
+    const { isWormhole, onShowConfigModal, streamConfigCheck, kafkaValues } = this.props
     const { streamMode } = this.state
     const { getFieldDecorator } = this.props.form
     const itemStyle = {
@@ -95,12 +102,14 @@ export class WorkbenchStreamForm extends React.PureComponent {
       disabledOrNot = true
     }
 
-    const children = []
-    for (let i = 0; i < topicsValues.length; i++) {
-      children.push(<Option key={topicsValues[i].id} value={`${topicsValues[i].id}`}>{topicsValues[i].name}</Option>)
-    }
+    // const topicChildren = []
+    // for (let i = 0; i < topicsValues.length; i++) {
+    //   topicChildren.push(<Option key={topicsValues[i].id} value={`${topicsValues[i].id}`}>{topicsValues[i].name}</Option>)
+    // }
 
-    const kafkaOptions = kafkaValues.map(s => (<Option key={s.id} value={`${s.id}`}>{s.name}</Option>))
+    // const topicChildren = topicsValues.map(i => (<Option key={i.id} value={`${i.id}`}>{i.name}</Option>))
+
+    const kafkaOptions = kafkaValues.map(s => (<Option key={s.id} value={`${s.id}`}>{s.nsInstance}</Option>))
 
     const streamConfigTag = streamConfigCheck === true
       ? (
@@ -169,7 +178,6 @@ export class WorkbenchStreamForm extends React.PureComponent {
               })(
                 <Select
                   dropdownClassName="ri-workbench-select-dropdown"
-                  onSelect={this.onKafkaTypeSelect}
                   placeholder="Select a Kafka"
                   disabled={disabledOrNot}
                 >
@@ -179,24 +187,27 @@ export class WorkbenchStreamForm extends React.PureComponent {
             </FormItem>
           </Col>
 
-          <Col span={24}>
+          {/* <Col span={24}>
             <FormItem label="Topics" {...itemStyle}>
               {getFieldDecorator('topics', {
-                // rules: [{
-                //   required: true,
-                //   message: '请选择 Topic'
-                // }]
+                rules: [{
+                  required: true,
+                  message: '请选择 Topic'
+                }]
               })(
                 <Select
-                  mode="multiple"
+                  tags
+                  // mode="multiple"
                   placeholder="Select Topics"
+                  searchPlaceholder="标签模式"
                   onChange={this.handleTopicsChange}
+                  onSelect={this.selectTopic}
                 >
-                  {children}
+                  {topicChildren}
                 </Select>
               )}
             </FormItem>
-          </Col>
+          </Col> */}
 
           <Col span={24}>
             <div className="ant-col-6 ant-form-item-label">
@@ -270,8 +281,7 @@ WorkbenchStreamForm.propTypes = {
   form: React.PropTypes.any,
   isWormhole: React.PropTypes.bool,
   kafkaValues: React.PropTypes.array,
-  topicsValues: React.PropTypes.array,
-  onKafkaTypeSelect: React.PropTypes.func,
+  // topicsValues: React.PropTypes.array,
   onShowConfigModal: React.PropTypes.func,
   onInitStreamNameValue: React.PropTypes.func,
   streamConfigCheck: React.PropTypes.bool

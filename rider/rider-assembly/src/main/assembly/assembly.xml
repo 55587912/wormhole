@@ -20,11 +20,12 @@
 
 
 <assembly>
-    <id>dist</id>
+    <id>wormhole</id>
     <formats>
         <format>zip</format>
+        <format>tar.gz</format>
     </formats>
-    <includeBaseDirectory>false</includeBaseDirectory>
+    <includeBaseDirectory>true</includeBaseDirectory>
 
     <fileSets>
         <fileSet>
@@ -34,29 +35,50 @@
         </fileSet>
         <fileSet>
             <directory>
-                ${project.parent.basedir}/conf
+                ${project.parent.basedir}/rider/conf
             </directory>
             <outputDirectory>conf</outputDirectory>
         </fileSet>
         <fileSet>
             <directory>
-                ${project.parent.basedir}/bin
+                ${project.parent.basedir}/rider/bin
             </directory>
             <outputDirectory>bin</outputDirectory>
         </fileSet>
         <fileSet>
-        <directory>
-        ${project.parent.basedir}/webapp
-        </directory>
-        <outputDirectory>bin</outputDirectory>
+            <directory>
+                ${project.parent.basedir}/rider/webapp
+            </directory>
+            <outputDirectory>webapp</outputDirectory>
         </fileSet>
         <fileSet>
+            <directory>
+                ${project.parent.basedir}/rider/swagger-ui
+            </directory>
+            <outputDirectory>swagger-ui</outputDirectory>
+        </fileSet>
+        <fileSet>
+            <directory>
+                ${project.parent.basedir}/rider/logs
+            </directory>
             <outputDirectory>logs</outputDirectory>
-            <excludes>
-                <exclude>**/*</exclude>
-            </excludes>
+        </fileSet>
+        <fileSet>
+            <directory>
+                ${project.parent.basedir}/rider/logs/streams
+            </directory>
+            <outputDirectory>logs/streams</outputDirectory>
         </fileSet>
     </fileSets>
+
+    <files>
+        <file>
+            <source>
+                ${project.parent.basedir}/sparkx/target/wormhole-ums_1.3-sparkx_2.2.0-0.3.0-SNAPSHOTS-jar-with-dependencies.jar
+            </source>
+            <outputDirectory>lib</outputDirectory>
+        </file>
+    </files>
 
     <dependencySets>
         <dependencySet>

@@ -25,31 +25,29 @@ import {
   LOAD_ADMIN_ALL_STREAMS_SUCCESS,
   LOAD_ADMIN_SINGLE_STREAM,
   LOAD_ADMIN_SINGLE_STREAM_SUCCESS,
+  LOAD_STREAM_DETAIL,
+  LOAD_STREAM_DETAIL_SUCCESS,
   LOAD_OFFSET,
   LOAD_OFFSET_SUCCESS,
-  CHUCKAWAY_TOPIC,
   LOAD_STREAM_NAME_VALUE,
   LOAD_STREAM_NAME_VALUE_SUCCESS,
+  LOAD_STREAM_NAME_VALUE_ERROR,
   LOAD_KAFKA,
   LOAD_KAFKA_SUCCESS,
   LOAD_STREAM_CONFIG_JVM,
   LOAD_STREAM_CONFIG_JVM_SUCCESS,
-  LOAD_TOPICS,
-  LOAD_TOPICS_SUCCESS,
-  EDIT_TOPICS,
-  EDIT_TOPICS_SUCCESS,
   LOAD_LOGS_INFO,
   LOAD_LOGS_INFO_SUCCESS,
   LOAD_ADMIN_LOGS_INFO,
   LOAD_ADMIN_LOGS_INFO_SUCCESS,
   ADD_STREAMS,
   ADD_STREAMS_SUCCESS,
-  LOAD_SINGLE_STREAM,
-  LOAD_SINGLE_STREAM_SUCCESS,
   EDIT_STREAM,
   EDIT_STREAM_SUCCESS,
   OPERATE_STREAMS,
   OPERATE_STREAMS_SUCCESS,
+  DELETE_STREAMS,
+  DELETE_STREAMS_SUCCESS,
   STARTORRENEW_STREAMS,
   STARTORRENEW_STREAMS_SUCCESS,
   OPERATE_STREAMS_ERROR
@@ -114,12 +112,33 @@ export function adminSingleStreamLoaded (stream, resolve) {
   }
 }
 
-export function loadOffset (projectId, streamId, resolve) {
+export function loadStreamDetail (projectId, streamId, roleType, resolve) {
   return {
-    type: LOAD_OFFSET,
+    type: LOAD_STREAM_DETAIL,
     payload: {
       projectId,
       streamId,
+      roleType,
+      resolve
+    }
+  }
+}
+
+export function streamDetailLoaded (result, resolve) {
+  return {
+    type: LOAD_STREAM_DETAIL_SUCCESS,
+    payload: {
+      result,
+      resolve
+    }
+  }
+}
+
+export function loadOffset (values, resolve) {
+  return {
+    type: LOAD_OFFSET,
+    payload: {
+      values,
       resolve
     }
   }
@@ -135,12 +154,6 @@ export function offsetLoaded (result, resolve) {
   }
 }
 
-export function chuckAwayTopic () {
-  return {
-    type: CHUCKAWAY_TOPIC
-  }
-}
-
 export function loadStreamNameValue (projectId, value, resolve, reject) {
   return {
     type: LOAD_STREAM_NAME_VALUE,
@@ -153,22 +166,32 @@ export function loadStreamNameValue (projectId, value, resolve, reject) {
   }
 }
 
-export function streamNameValueLoaded (result, resolve, reject) {
+export function streamNameValueLoaded (result, resolve) {
   return {
     type: LOAD_STREAM_NAME_VALUE_SUCCESS,
     payload: {
       result,
-      resolve,
+      resolve
+    }
+  }
+}
+
+export function streamNameValueErrorLoaded (result, reject) {
+  return {
+    type: LOAD_STREAM_NAME_VALUE_ERROR,
+    payload: {
+      result,
       reject
     }
   }
 }
 
-export function loadKafka (projectId, resolve) {
+export function loadKafka (projectId, nsSys, resolve) {
   return {
     type: LOAD_KAFKA,
     payload: {
       projectId,
+      nsSys,
       resolve
     }
   }
@@ -196,49 +219,6 @@ export function loadStreamConfigJvm (resolve) {
 export function streamConfigJvmLoaded (result, resolve) {
   return {
     type: LOAD_STREAM_CONFIG_JVM_SUCCESS,
-    payload: {
-      result,
-      resolve
-    }
-  }
-}
-
-export function loadTopics (projectId, instanceId, resolve) {
-  return {
-    type: LOAD_TOPICS,
-    payload: {
-      projectId,
-      instanceId,
-      resolve
-    }
-  }
-}
-
-export function topicsLoaded (result, resolve) {
-  return {
-    type: LOAD_TOPICS_SUCCESS,
-    payload: {
-      result,
-      resolve
-    }
-  }
-}
-
-export function editTopics (projectId, streamId, values, resolve) {
-  return {
-    type: EDIT_TOPICS,
-    payload: {
-      projectId,
-      streamId,
-      values,
-      resolve
-    }
-  }
-}
-
-export function topicsEdited (result, resolve) {
-  return {
-    type: EDIT_TOPICS_SUCCESS,
     payload: {
       result,
       resolve
@@ -288,67 +268,43 @@ export function adminLogsInfoLoaded (result, resolve) {
   }
 }
 
-export function addStream (stream, resolve, reject) {
+export function addStream (projectId, stream, resolve) {
   return {
     type: ADD_STREAMS,
     payload: {
+      projectId,
       stream,
-      resolve,
-      reject
+      resolve
     }
   }
 }
 
-export function streamAdded (result, resolve, reject) {
+export function streamAdded (result, resolve) {
   return {
     type: ADD_STREAMS_SUCCESS,
     payload: {
       result,
-      resolve,
-      reject
-    }
-  }
-}
-
-export function loadSingleStream (projectId, streamId, resolve) {
-  return {
-    type: LOAD_SINGLE_STREAM,
-    payload: {
-      projectId,
-      streamId,
       resolve
     }
   }
 }
 
-export function singleStreamLoaded (result, resolve) {
-  return {
-    type: LOAD_SINGLE_STREAM_SUCCESS,
-    payload: {
-      result,
-      resolve
-    }
-  }
-}
-
-export function editStream (stream, resolve, reject) {
+export function editStream (stream, resolve) {
   return {
     type: EDIT_STREAM,
     payload: {
       stream,
-      resolve,
-      reject
+      resolve
     }
   }
 }
 
-export function streamEdited (result, resolve, reject) {
+export function streamEdited (result, resolve) {
   return {
     type: EDIT_STREAM_SUCCESS,
     payload: {
       result,
-      resolve,
-      reject
+      resolve
     }
   }
 }
@@ -369,6 +325,30 @@ export function operateStream (projectId, id, action, resolve, reject) {
 export function streamOperated (result, resolve, reject) {
   return {
     type: OPERATE_STREAMS_SUCCESS,
+    payload: {
+      result,
+      resolve,
+      reject
+    }
+  }
+}
+
+export function deleteStream (projectId, id, action, resolve, reject) {
+  return {
+    type: DELETE_STREAMS,
+    payload: {
+      projectId,
+      id,
+      action,
+      resolve,
+      reject
+    }
+  }
+}
+
+export function streamDeleted (result, resolve, reject) {
+  return {
+    type: DELETE_STREAMS_SUCCESS,
     payload: {
       result,
       resolve,

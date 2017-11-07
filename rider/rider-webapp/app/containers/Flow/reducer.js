@@ -35,6 +35,7 @@ import {
   LOAD_TRANSINKTYPE_NAMESPACE_SUCCESS,
   LOAD_SOURCETOSINK_EXIST,
   LOAD_SOURCETOSINK_EXIST_SUCCESS,
+  LOAD_SOURCETOSINK_EXIST_ERROR,
   ADD_FLOWS,
   ADD_FLOWS_SUCCESS,
   OPERATE_USER_FLOW,
@@ -45,8 +46,6 @@ import {
   CHUCKAWAY_FLOW,
 
   LOAD_FLOWS_ERROR,
-  DELETE_FLOWS,
-  DELETE_FLOWS_SUCCESS,
   LOAD_SOURCELOG_DETAIL,
   LOAD_SOURCELOG_DETAIL_SUCCESS,
   LOAD_SOURCELOG_DETAIL_ERROR,
@@ -78,7 +77,8 @@ import { fromJS } from 'immutable'
 const initialState = fromJS({
   flows: false,
   error: false,
-  flowSubmitLoading: false
+  flowSubmitLoading: false,
+  sourceToSinkExited: false
 })
 
 function flowReducer (state = initialState, { type, payload }) {
@@ -120,15 +120,21 @@ function flowReducer (state = initialState, { type, payload }) {
       payload.resolve(payload.result)
       return state
     case LOAD_SOURCETOSINK_EXIST:
-      return state
+      return state.set('sourceToSinkExited', false)
     case LOAD_SOURCETOSINK_EXIST_SUCCESS:
-      payload.resolve(payload.result)
-      return state
+      payload.resolve()
+      return state.set('sourceToSinkExited', false)
+    case LOAD_SOURCETOSINK_EXIST_ERROR:
+      payload.reject()
+      return state.set('sourceToSinkExited', true)
     case ADD_FLOWS:
       return state.set('flowSubmitLoading', true)
     case ADD_FLOWS_SUCCESS:
-      payload.resolve()
-      flows.unshift(payload.result)
+      payload.resolve(payload.result)
+
+      for (let i = 0; i < payload.result.length; i++) {
+        flows.unshift(payload.result[i])
+      }
       payload.final()
       return state
         .set('flows', flows.slice())
@@ -136,9 +142,20 @@ function flowReducer (state = initialState, { type, payload }) {
     case OPERATE_USER_FLOW:
       return state.set('error', false)
     case OPERATE_USER_FLOW_SUCCESS:
-      flows.splice(flows.indexOf(flows.find(g => g.id === payload.result.id)), 1, payload.result)
-      payload.resolve()
-      return state.set('flows', flows.slice())
+      if (typeof (payload.result) === 'string') {
+        payload.resolve(payload.result)
+        return state.set('flows', flows.filter(g => payload.result.split(',').indexOf(`${g.id}`) < 0))
+      } else {
+        if (payload.result.length === undefined) {
+          flows.splice(flows.indexOf(flows.find(g => g.id === payload.result.id)), 1, payload.result)
+        } else {
+          for (let i = 0; i < payload.result.length; i++) {
+            flows.splice(flows.indexOf(flows.find(g => g.id === payload.result[i].id)), 1, payload.result[i])
+          }
+        }
+        payload.resolve(payload.result)
+        return state.set('flows', flows.slice())
+      }
     case OPERATE_FLOW_ERROR:
       payload.reject(payload.message)
       return state
@@ -152,17 +169,6 @@ function flowReducer (state = initialState, { type, payload }) {
       return state
     case LOAD_FLOWS_ERROR:
       return state.set('error', payload.error)
-    case DELETE_FLOWS:
-      return state.set('error', false)
-    case DELETE_FLOWS_SUCCESS:
-      payload.resolve()
-      const selectedDeletedFlows = flows.filter(g => payload.flowsIds.split(',').indexOf(`${g.id}`) >= 0)
-      selectedDeletedFlows.forEach((element) => {
-        if (element.status !== 'deleting') {
-          element.status = 'deleting'
-        }
-      })
-      return state.set('flows', flows.slice())
     case LOAD_SOURCELOG_DETAIL:
       return state.set('error', false)
     case LOAD_SOURCELOG_DETAIL_SUCCESS:

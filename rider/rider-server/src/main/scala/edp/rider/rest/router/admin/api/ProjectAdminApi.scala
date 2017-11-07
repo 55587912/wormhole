@@ -23,9 +23,9 @@ package edp.rider.rest.router.admin.api
 
 import akka.http.scaladsl.model.StatusCodes._
 import akka.http.scaladsl.server.Route
-import edp.rider.common.RiderLogger
-import edp.rider.monitor.{CacheMap, Dashboard}
-import edp.rider.rest.persistence.dal.{ProjectDal, RelProjectNsDal, RelProjectUserDal}
+import edp.rider.common.{RiderConfig, RiderLogger}
+import edp.rider.monitor.Dashboard
+import edp.rider.rest.persistence.dal.{ProjectDal, RelProjectNsDal, RelProjectUdfDal, RelProjectUserDal}
 import edp.rider.rest.persistence.entities._
 import edp.rider.rest.router.JsonProtocol._
 import edp.rider.rest.router.{ResponseJson, ResponseSeqJson, SessionClass}
@@ -34,9 +34,10 @@ import edp.rider.rest.util.CommonUtils._
 import edp.rider.rest.util.ResponseUtils._
 import slick.jdbc.MySQLProfile.api._
 
+import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success}
 
-class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, relProjectUserDal: RelProjectUserDal) extends BaseAdminApiImpl(projectDal) with RiderLogger {
+class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, relProjectUserDal: RelProjectUserDal, relProjectUdfDal: RelProjectUdfDal) extends BaseAdminApiImpl(projectDal) with RiderLogger {
 
   override def getByIdRoute(route: String): Route = path(route / LongNumber) {
     id =>
@@ -45,21 +46,21 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
           session =>
             if (session.roleType != "admin") {
               riderLogger.warn(s"${session.userId} has no permission to access it.")
-              complete(Forbidden, getHeader(403, session))
+              complete(OK, getHeader(403, session))
             }
             else {
-              onComplete(projectDal.getById(id).mapTo[Option[ProjectUserNs]]) {
+              onComplete(projectDal.getById(id).mapTo[Option[ProjectUserNsUdf]]) {
                 case Success(projectOpt) => projectOpt match {
                   case Some(project) =>
                     riderLogger.info(s"user ${session.userId} select project where id is $id success.")
-                    complete(OK, ResponseJson[ProjectUserNs](getHeader(200, session), project))
+                    complete(OK, ResponseJson[ProjectUserNsUdf](getHeader(200, session), project))
                   case None =>
                     riderLogger.warn(s"user ${session.userId} select project where id is $id success, but it doesn't exist.")
                     complete(OK, ResponseJson[String](getHeader(200, session), ""))
                 }
                 case Failure(ex) =>
                   riderLogger.error(s"user ${session.userId} select project where id is $id failed", ex)
-                  complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                  complete(OK, getHeader(451, ex.getMessage, session))
               }
             }
         }
@@ -75,7 +76,7 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
             session =>
               if (session.roleType != "admin") {
                 riderLogger.warn(s"${session.userId} has no permission to access it.")
-                complete(Forbidden, getHeader(403, session))
+                complete(OK, getHeader(403, session))
               }
               else {
                 (visible, name) match {
@@ -88,11 +89,11 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
                         }
                         else {
                           riderLogger.warn(s"user ${session.userId} check project name $projectName already exists.")
-                          complete(Conflict, getHeader(409, s"$projectName project already exists", session))
+                          complete(OK, getHeader(409, s"$projectName project already exists", session))
                         }
                       case Failure(ex) =>
                         riderLogger.error(s"user ${session.userId} check project name $projectName does exist failed", ex)
-                        complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                        complete(OK, getHeader(451, ex.getMessage, session))
                     }
                   case (_, None) =>
                     onComplete(projectDal.findAll.mapTo[Seq[Project]]) {
@@ -101,11 +102,11 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
                         complete(OK, ResponseSeqJson[Project](getHeader(200, session), projects.sortBy(project => (project.active, project.createTime)).reverse))
                       case Failure(ex) =>
                         riderLogger.error(s"user ${session.userId} select all $route failed", ex)
-                        complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                        complete(OK, getHeader(451, ex.getMessage, session))
                     }
                   case (_, _) =>
                     riderLogger.error(s"user ${session.userId} request url is not supported.")
-                    complete(NotImplemented, getHeader(501, session))
+                    complete(OK, getHeader(501, session))
                 }
               }
           }
@@ -122,37 +123,51 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
             session =>
               if (session.roleType != "admin") {
                 riderLogger.warn(s"${session.userId} has no permission to access it.")
-                complete(Forbidden, getHeader(403, session))
+                complete(OK, getHeader(403, session))
               }
               else {
                 val projectEntity = Project(0, simple.name, Some(simple.desc.getOrElse("")), simple.pic, simple.resCores, simple.resMemoryG, active = true, currentSec, session.userId, currentSec, session.userId)
                 onComplete(projectDal.insert(projectEntity).mapTo[Project]) {
                   case Success(project) =>
-                    riderLogger.info(s"user ${session.userId} inserted project $project success.")
+                    riderLogger.info(s"user ${session.userId} insert project success.")
                     val relNsEntity = simple.nsId.split(",").map(nsId => RelProjectNs(0, project.id, nsId.toLong, active = true, currentSec, session.userId, currentSec, session.userId)).toSeq
                     val relUserEntity = simple.userId.split(",").map(userId => RelProjectUser(0, project.id, userId.toLong, active = true, currentSec, session.userId, currentSec, session.userId)).toSeq
+                    val relUdfEntity =
+                      if (simple.udfId != "" && simple.udfId != null)
+                        simple.udfId.split(",").map(udfId => RelProjectUdf(0, project.id, udfId.toLong, currentSec, session.userId, currentSec, session.userId)).toSeq
+                      else null
                     onComplete(relProjectNsDal.insert(relNsEntity).mapTo[Seq[RelProjectNs]]) {
-                      case Success(relProjectNss) =>
-                        riderLogger.info(s"user ${session.userId} inserted relProjectNs $relProjectNss success.")
+                      case Success(_) =>
+                        riderLogger.info(s"user ${session.userId} insert relProjectNs success.")
                         onComplete(relProjectUserDal.insert(relUserEntity).mapTo[Seq[RelProjectUser]]) {
-                          case Success(relProjectUsers) =>
-                            riderLogger.info(s"user ${session.userId} inserted relProjectUser $relProjectUsers success.")
-                            Dashboard.createDashboard(project.id, simple.name)
-                            complete(OK, ResponseJson[Project](getHeader(200, session), project))
+                          case Success(_) =>
+                            riderLogger.info(s"user ${session.userId} insert relProjectUser success.")
+                            if (relUdfEntity != null) {
+                              onComplete(relProjectUdfDal.insert(relUdfEntity).mapTo[Seq[RelProjectUdf]]) {
+                                case Success(_) =>
+                                  riderLogger.info(s"user ${session.userId} insert relProjectUdf success.")
+                                  if (RiderConfig.grafana != null)
+                                    Dashboard.createDashboard(project.id, simple.name)
+                                  complete(OK, ResponseJson[Project](getHeader(200, session), project))
+                                case Failure(ex) =>
+                                  riderLogger.error(s"user ${session.userId} insert relProjectUdf failed", ex)
+                                  complete(OK, getHeader(451, ex.getMessage, session))
+                              }
+                            } else complete(OK, ResponseJson[Project](getHeader(200, session), project))
                           case Failure(ex) =>
-                            riderLogger.error(s"user ${session.userId} inserted relProjectUser $relUserEntity failed", ex)
-                            complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                            riderLogger.error(s"user ${session.userId} insert relProjectUdf failed", ex)
+                            complete(OK, getHeader(451, ex.getMessage, session))
                         }
                       case Failure(ex) =>
-                        riderLogger.error(s"user ${session.userId} inserted relProjectNs $relNsEntity failed", ex)
-                        complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                        riderLogger.error(s"user ${session.userId} insert relProjectNs failed", ex)
+                        complete(OK, getHeader(451, ex.getMessage, session))
                     }
                   case Failure(ex) =>
-                    riderLogger.error(s"user ${session.userId} inserted project $projectEntity failed", ex)
+                    riderLogger.error(s"user ${session.userId} insert project failed", ex)
                     if (ex.toString.contains("Duplicate entry"))
-                      complete(Conflict, getHeader(409, s"${simple.name} project already exists", session))
+                      complete(OK, getHeader(409, s"${simple.name} project already exists", session))
                     else
-                      complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                      complete(OK, getHeader(451, ex.getMessage, session))
                 }
               }
           }
@@ -164,58 +179,128 @@ class ProjectAdminApi(projectDal: ProjectDal, relProjectNsDal: RelProjectNsDal, 
 
   def putRoute(route: String): Route = path(route) {
     put {
-      entity(as[ProjectUserNs]) {
+      entity(as[ProjectUserNsUdf]) {
         entity =>
           authenticateOAuth2Async[SessionClass]("rider", AuthorizationProvider.authorize) {
             session =>
               if (session.roleType != "admin") {
                 riderLogger.warn(s"${session.userId} has no permission to access it.")
-                complete(Forbidden, getHeader(403, session))
+                complete(OK, getHeader(403, session))
               }
               else {
                 val projectEntity = Project(entity.id, entity.name, Some(entity.desc.getOrElse("")), entity.pic, entity.resCores, entity.resMemoryG, entity.active, entity.createTime, entity.createBy, currentSec, session.userId)
                 onComplete(projectDal.update(projectEntity).mapTo[Int]) {
-                  case Success(project) =>
-                    riderLogger.info(s"user ${session.userId} updated project $projectEntity success.")
+                  case Success(_) =>
+                    riderLogger.info(s"user ${session.userId} updated project success.")
                     val relNsEntity = entity.nsId.split(",").map(nsId => RelProjectNs(0, entity.id, nsId.toLong, active = true, currentSec, session.userId, currentSec, session.userId)).toSeq
                     val relUserEntity = entity.userId.split(",").map(userId => RelProjectUser(0, entity.id, userId.toLong, active = true, currentSec, session.userId, currentSec, session.userId)).toSeq
-                    onComplete(relProjectNsDal.deleteByFilter(_.projectId === entity.id).mapTo[Int]) {
-                      case Success(nsIds) =>
-                        riderLogger.info(s"user ${session.userId} deleted relProjectNs where project id is ${entity.id} success.")
-                        onComplete(relProjectNsDal.insert(relNsEntity).mapTo[Seq[RelProjectNs]]) {
-                          case Success(relProjectNss) =>
-                            riderLogger.info(s"user ${session.userId} inserted relProjectNs $relNsEntity success.")
-                            onComplete(relProjectUserDal.deleteByFilter(_.projectId === entity.id).mapTo[Int]) {
-                              case Success(userIds) =>
-                                riderLogger.info(s"user ${session.userId} deleted relProjectUser where project id is ${entity.id} success.")
-                                onComplete(relProjectUserDal.insert(relUserEntity).mapTo[Seq[RelProjectUser]]) {
-                                  case Success(relProjectUsers) =>
-                                    riderLogger.info(s"user ${session.userId} inserted relProjectUser $relUserEntity success.")
-                                    complete(OK, ResponseJson[Project](getHeader(200, session), projectEntity))
+                    val relUdfEntity = entity.udfId.split(",").map(udfId => RelProjectUdf(0, entity.id, udfId.toLong, currentSec, session.userId, currentSec, session.userId)).toSeq
+                    onComplete(relProjectNsDal.findByFilter(_.projectId === entity.id).mapTo[Seq[RelProjectNs]]) {
+                      case Success(existRelNsSeq) =>
+                        riderLogger.info(s"user ${session.userId} select relProjectNs where project id is ${entity.id} success.")
+                        val existRelNsIds = existRelNsSeq.map(_.nsId)
+                        val putRelNsIds = relNsEntity.map(_.nsId)
+                        val deleteNsIds = existRelNsIds.filter(!putRelNsIds.contains(_))
+                        val insertNsSeq = relNsEntity.filter(relNs => !existRelNsIds.contains(relNs.nsId))
+                        onComplete(relProjectNsDal.deleteByFilter(relNs => relNs.projectId === entity.id && relNs.nsId.inSet(deleteNsIds)).mapTo[Int]) {
+                          case Success(_) =>
+                            riderLogger.info(s"user ${session.userId} delete relProjectNs where project id is ${entity.id} and nsId in $deleteNsIds success")
+                            onComplete(relProjectNsDal.insert(insertNsSeq).mapTo[Seq[RelProjectNs]]) {
+                              case Success(_) =>
+                                riderLogger.info(s"user ${session.userId} insert relProjectNs success.")
+                                onComplete(relProjectUserDal.findByFilter(_.projectId === entity.id).mapTo[Seq[RelProjectUser]]) {
+                                  case Success(existRelUserSeq) =>
+                                    val existRelUserIds = existRelUserSeq.map(_.userId)
+                                    val putRelUserIds = relUserEntity.map(_.userId)
+                                    val deleteUserIds = existRelUserIds.filter(!putRelUserIds.contains(_))
+                                    val insertUserSeq = relUserEntity.filter(relUser => !existRelUserIds.contains(relUser.userId))
+                                    onComplete(relProjectUserDal.deleteByFilter(relUser => relUser.projectId === entity.id && relUser.userId.inSet(deleteUserIds)).mapTo[Int]) {
+                                      case Success(_) =>
+                                        riderLogger.info(s"user ${session.userId} delete relProjectUser where project id is ${entity.id} and userId in $deleteUserIds success.")
+                                        onComplete(relProjectUserDal.insert(insertUserSeq).mapTo[Seq[RelProjectUser]]) {
+                                          case Success(_) =>
+                                            riderLogger.info(s"user ${session.userId} insert relProjectUser success.")
+                                            onComplete(relProjectUdfDal.findByFilter(_.projectId === entity.id).mapTo[Seq[RelProjectUdf]]) {
+                                              case Success(existRelUdfSeq) =>
+                                                val existRelUdfIds = existRelUdfSeq.map(_.udfId)
+                                                val putRelUdfIds = relUdfEntity.map(_.udfId)
+                                                val deleteUdfIds = existRelUdfIds.filter(!putRelUdfIds.contains(_))
+                                                val insertUdfSeq = relUdfEntity.filter(relUdf => !existRelUdfIds.contains(relUdf.udfId))
+                                                onComplete(relProjectUdfDal.deleteByFilter(relUdf => relUdf.projectId === entity.id && relUdf.udfId.inSet(deleteUdfIds)).mapTo[Int]) {
+                                                  case Success(_) =>
+                                                    riderLogger.info(s"user ${session.userId} delete relProjectUdf where project id is ${entity.id} and udfId in $deleteUdfIds success.")
+                                                    onComplete(relProjectUdfDal.insert(insertUdfSeq).mapTo[Seq[RelProjectUdf]]) {
+                                                      case Success(_) =>
+                                                        riderLogger.info(s"user ${session.userId} insert relProjectUdf success.")
+                                                        complete(OK, ResponseJson[Project](getHeader(200, session), projectEntity))
+                                                      case Failure(ex) =>
+                                                        riderLogger.error(s"user ${session.userId} insert relProjectUdf failed", ex)
+                                                        complete(OK, getHeader(451, ex.getMessage, session))
+                                                    }
+                                                  case Failure(ex) =>
+                                                    riderLogger.error(s"user ${session.userId} delete relProjectUdf where project id is ${entity.id} and udf in $deleteUdfIds failed", ex)
+                                                    complete(OK, getHeader(451, ex.getMessage, session))
+                                                }
+                                              case Failure(ex) =>
+                                                riderLogger.error(s"user ${session.userId} select relProjectUdf where project id is ${entity.id} failed", ex)
+                                                complete(OK, getHeader(451, ex.getMessage, session))
+                                            }
+                                          case Failure(ex) =>
+                                            riderLogger.error(s"user ${session.userId} insert relProjectUser failed", ex)
+                                            complete(OK, getHeader(451, ex.getMessage, session))
+                                        }
+                                      case Failure(ex) =>
+                                        riderLogger.error(s"user ${session.userId} delete relProjectUser where project id is ${entity.id} and userId in $deleteUserIds failed", ex)
+                                        complete(OK, getHeader(451, ex.getMessage, session))
+                                    }
                                   case Failure(ex) =>
-                                    riderLogger.error(s"user ${session.userId} inserted relProjectUser $relUserEntity failed", ex)
-                                    complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                                    riderLogger.error(s"user ${session.userId} select relProjectUser where project id is ${entity.id} failed", ex)
+                                    complete(OK, getHeader(451, ex.getMessage, session))
                                 }
                               case Failure(ex) =>
-                                riderLogger.error(s"user ${session.userId} deleted relProjectUser where project id is ${entity.id} failed", ex)
-                                complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                                riderLogger.error(s"user ${session.userId} insert relProjectNs failed", ex)
+                                complete(OK, getHeader(451, ex.getMessage, session))
                             }
                           case Failure(ex) =>
-                            riderLogger.error(s"user ${session.userId} inserted relProjectNs $relNsEntity failed", ex)
-                            complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                            riderLogger.error(s"user ${session.userId} delete relProjectNs where project id is ${entity.id} and nsId in $deleteNsIds failed", ex)
+                            complete(OK, getHeader(451, ex.getMessage, session))
                         }
                       case Failure(ex) =>
-                        riderLogger.error(s"user ${session.userId} deleted relProjectNs where project id is ${entity.id} failed", ex)
-                        complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                        riderLogger.error(s"user ${session.userId} select relProjectNs where project id is ${entity.id} failed", ex)
+                        complete(OK, getHeader(451, ex.getMessage, session))
                     }
                   case Failure(ex) =>
-                    riderLogger.error(s"user ${session.userId} updated project $projectEntity failed", ex)
-                    complete(UnavailableForLegalReasons, getHeader(451, ex.getMessage, session))
+                    riderLogger.error(s"user ${session.userId} update project failed", ex)
+                    complete(OK, getHeader(451, ex.getMessage, session))
                 }
               }
           }
       }
     }
+  }
 
+  override def deleteRoute(route: String): Route = path(route / LongNumber) {
+    id =>
+      delete {
+        authenticateOAuth2Async[SessionClass]("rider", AuthorizationProvider.authorize) {
+          session =>
+            if (session.roleType != "admin") {
+              riderLogger.warn(s"${session.userId} has no permission to access it.")
+              complete(OK, getHeader(403, session))
+            }
+            else {
+              try {
+                val result = projectDal.delete(id)
+                if (result._1)
+                  complete(OK, getHeader(200, session))
+                else complete(OK, getHeader(412, result._2, session))
+              } catch {
+                case ex: Exception =>
+                  riderLogger.error(s"user ${session.userId} delete project $id success", ex)
+                  complete(OK, getHeader(451, session))
+              }
+            }
+        }
+      }
   }
 }

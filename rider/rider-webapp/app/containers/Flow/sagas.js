@@ -32,7 +32,6 @@ import {
   ADD_FLOWS,
   OPERATE_USER_FLOW,
 
-  DELETE_FLOWS,
   LOAD_SOURCELOG_DETAIL,
   LOAD_SOURCESINK_DETAIL,
   LOAD_SINKWRITERROR_DETAIL,
@@ -54,12 +53,12 @@ import {
   sinkTypeNamespaceLoaded,
   tranSinkTypeNamespaceLoaded,
   sourceToSinkExistLoaded,
+  sourceToSinkExistErrorLoaded,
   flowAdded,
   userFlowOperated,
   operateFlowError,
 
   flowsLoadingError,
-  flowDeleted,
   sourceLogLoadedDetail,
   sourceSinkDetailLoaded,
   sinkWriteRrrorDetailLoaded,
@@ -138,7 +137,11 @@ export function* getSelectStreamKafkaTopicWatcher () {
 export function* getSourceTypeNamespace ({ payload }) {
   try {
     const result = yield call(request, `${api.projectUserList}/${payload.projectId}/streams/${payload.streamId}/namespaces?${payload.type}=${payload.value}`)
-    yield put(sourceSinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    if (result.code) {
+      return
+    } else if (result.header.code || result.header.code === 200) {
+      yield put(sourceSinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    }
   } catch (err) {
     notifySagasError(err, 'getSourceTypeNamespace')
   }
@@ -151,7 +154,11 @@ export function* getSourceTypeNamespaceWatcher () {
 export function* getSinkTypeNamespace ({ payload }) {
   try {
     const result = yield call(request, `${api.projectUserList}/${payload.projectId}/streams/${payload.streamId}/namespaces?${payload.type}=${payload.value}`)
-    yield put(sinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    if (result.code) {
+      return
+    } else if (result.header.code || result.header.code === 200) {
+      yield put(sinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    }
   } catch (err) {
     notifySagasError(err, 'getSinkTypeNamespace')
   }
@@ -164,7 +171,11 @@ export function* getSinkTypeNamespaceWatcher () {
 export function* getTranSinkTypeNamespace ({ payload }) {
   try {
     const result = yield call(request, `${api.projectUserList}/${payload.projectId}/streams/${payload.streamId}/namespaces?${payload.type}=${payload.value}`)
-    yield put(tranSinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    if (result.code) {
+      return
+    } else if (result.header.code || result.header.code === 200) {
+      yield put(tranSinkTypeNamespaceLoaded(result.payload, payload.resolve))
+    }
   } catch (err) {
     notifySagasError(err, 'getTranSinkTypeNamespace')
   }
@@ -183,7 +194,7 @@ export function* getSourceToSink ({ payload }) {
     if (result.code === 200) {
       yield put(sourceToSinkExistLoaded(result.msg, payload.resolve))
     } else {
-      yield put(sourceToSinkExistLoaded(result.msg, payload.reject))
+      yield put(sourceToSinkExistErrorLoaded(result.msg, payload.reject))
     }
   } catch (err) {
     notifySagasError(err, 'getSourceToSink')
@@ -216,13 +227,24 @@ export function* operateUserFlow ({ payload }) {
     const result = yield call(request, {
       method: 'put',
       url: `${api.projectUserList}/${payload.values.projectId}/actions`,
-      data: payload.values
+      data: {
+        action: payload.values.action,
+        flowIds: payload.values.flowIds
+      }
     })
-
     if (result.code && result.code !== 200) {
       yield put(operateFlowError(result.msg, payload.reject))
     } else if (result.header.code && result.header.code === 200) {
-      yield put(userFlowOperated(result.payload[0], payload.resolve))
+      if (payload.values.action === 'delete') {
+        yield put(userFlowOperated(payload.values.flowIds, payload.resolve))
+      } else {
+        const temp = payload.values.flowIds.split(',')
+        if (temp.length === 1) {
+          yield put(userFlowOperated(result.payload[0], payload.resolve))
+        } else if (temp.length > 1) {
+          yield put(userFlowOperated(result.payload, payload.resolve))
+        }
+      }
     }
   } catch (err) {
     notifySagasError(err, 'operateUserFlow')
@@ -247,23 +269,6 @@ export function* queryForm ({ payload }) {
 
 export function* queryFormWatcher () {
   yield fork(takeEvery, QUERY_FLOW, queryForm)
-}
-
-export function* deleteFlow ({ payload }) {
-  try {
-    yield call(request, {
-      method: 'delete',
-      url: `${api.flow}/${payload.projectId}`,
-      data: payload.flowsIds
-    })
-    yield put(flowDeleted(payload.projectId, payload.flowsIds, payload.resolve))
-  } catch (err) {
-    notifySagasError(err, 'deleteFlow')
-  }
-}
-
-export function* deleteFlowWatcher () {
-  yield fork(takeEvery, DELETE_FLOWS, deleteFlow)
 }
 
 export function* getSourceLogDetail ({ payload }) {
@@ -490,7 +495,6 @@ export default [
   operateUserFlowWatcher,
   queryFormWatcher,
 
-  deleteFlowWatcher,
   getSourceLogDetailWatcher,
   getSourceSinkDetailWatcher,
   getSinkWriteRrrorDetailWatcher,

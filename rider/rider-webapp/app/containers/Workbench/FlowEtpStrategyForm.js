@@ -34,29 +34,16 @@ export class FlowEtpConfigForm extends React.Component {
   constructor (props) {
     super(props)
     this.state = {
-      checkRuleValue: '',
       ruleModeValue: '',
       againstActionValue: ''
     }
   }
 
-  onCheckRuleChange = (e) => {
-    this.setState({
-      radioValue: e.target.value
-    })
-  }
+  onCheckRuleChange = (e) => this.setState({ radioValue: e.target.value })
 
-  onRuleModeChange = (e) => {
-    this.setState({
-      ruleModeValue: e.target.value
-    })
-  }
+  onRuleModeChange = (e) => this.setState({ ruleModeValue: e.target.value })
 
-  onAgainstActionChange = (e) => {
-    this.setState({
-      againstActionValue: e.target.value
-    })
-  }
+  onAgainstActionChange = (e) => this.setState({ againstActionValue: e.target.value })
 
   forceCheckNumSave = (rule, value, callback) => {
     const reg = /^\d+$/

@@ -25,6 +25,9 @@ import Form from 'antd/lib/form'
 const FormItem = Form.Item
 import Row from 'antd/lib/row'
 import Col from 'antd/lib/col'
+import Popover from 'antd/lib/popover'
+import Tooltip from 'antd/lib/tooltip'
+import Icon from 'antd/lib/icon'
 import Input from 'antd/lib/input'
 import InputNumber from 'antd/lib/input-number'
 import Cascader from 'antd/lib/cascader'
@@ -33,19 +36,7 @@ const RadioButton = Radio.Button
 const RadioGroup = Radio.Group
 
 export class FlowTransformForm extends React.Component {
-  constructor (props) {
-    super(props)
-    this.state = {
-      transformNamespaceHierarchy: [],
-      sinkNamespaceHierarchy: [],
-      transformModalVisible: false
-    }
-  }
-
-  onTransformTypeSelect = (e) => {
-    // 调用上层函数
-    this.props.onInitTransformValue(e.target.value)
-  }
+  onTransformTypeSelect = (e) => this.props.onInitTransformValue(e.target.value)
 
   onLookupSqlTypeItemSelect = (val) => {
     // console.log(val)
@@ -116,8 +107,43 @@ export class FlowTransformForm extends React.Component {
       { value: 'es', icon: 'icon-elastic', style: {fontSize: '24px'} },
       { value: 'hbase', icon: 'icon-hbase1' },
       { value: 'phoenix', text: 'Phoenix' },
-      { value: 'kafka', text: 'Kafka' }
+      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} },
+      { value: 'postgresql', icon: 'icon-postgresql', style: {fontSize: '31px'} }
     ]
+
+    const lookUpSqlMsg = (
+      <span>
+        SQL
+        <Tooltip title="帮助">
+          <Popover
+            placement="top"
+            content={<div style={{ width: '400px', height: '90px' }}>
+              <p>若 where 条件含有 source 数据中某字段值, table 为 source namespace, for example: source namespace 为kafka.test.test.test.*.*.*, 含有字段 id,name, look up时选择source namespace 中的 id 和 name, SQL 语句为 select * from look_up_table where (id,name) in (kafka.test.test.test.*.*.*.id, kafka.test.test.test.*.*.*.name);</p>
+            </div>}
+            title={<h3>帮助</h3>}
+            trigger="click">
+            <Icon type="question-circle-o" className="question-class" />
+          </Popover>
+        </Tooltip>
+      </span>
+    )
+
+    const sparkSqlMsg = (
+      <span>
+        SQL
+        <Tooltip title="帮助">
+          <Popover
+            placement="top"
+            content={<div style={{ width: '400px', height: '90px' }}>
+              <p>sql 语句中的 table 为 source namespace 中第四层，for example: source namespace 为kafka.test.test1.test2.*.*.*, sql 语句为 select * from test2;</p>
+            </div>}
+            title={<h3>帮助</h3>}
+            trigger="click">
+            <Icon type="question-circle-o" className="question-class" />
+          </Popover>
+        </Tooltip>
+      </span>
+    )
 
     return (
       <Form className="transform-modal-style">
@@ -193,16 +219,16 @@ export class FlowTransformForm extends React.Component {
             </FormItem>
           </Col>
           <Col span={24} className={transformTypeClassNames[0]}>
-            <FormItem label="Namespace" {...itemStyle}>
+            <FormItem label="Database" {...itemStyle}>
               {getFieldDecorator('transformSinkNamespace', {
                 rules: [{
                   required: true,
-                  message: '请选择 Namespace'
+                  message: '请选择 Database'
                 }],
                 hidden: transformTypeHiddens[0]
               })(
                 <Cascader
-                  placeholder="Select a Namespace"
+                  placeholder="Select a Database"
                   popupClassName="ri-workbench-select-dropdown"
                   options={transformSinkTypeNamespaceData}
                   expandTrigger="hover"
@@ -220,7 +246,7 @@ export class FlowTransformForm extends React.Component {
             </FormItem>
           </Col>
           <Col span={24} className={transformTypeClassNames[0]}>
-            <FormItem label="SQL" {...itemStyle}>
+            <FormItem label={lookUpSqlMsg} {...itemStyle}>
               {getFieldDecorator('lookupSql', {
                 rules: [{
                   required: true,
@@ -228,14 +254,17 @@ export class FlowTransformForm extends React.Component {
                 }],
                 hidden: transformTypeHiddens[0]
               })(
-                <Input type="textarea" placeholder="Lookup SQL" autosize={{ minRows: 5, maxRows: 8 }} />
+                <Input
+                  type="textarea"
+                  placeholder="Lookup Sql"
+                  autosize={{ minRows: 5, maxRows: 8 }} />
               )}
             </FormItem>
           </Col>
 
           {/* 设置 Spark Sql */}
           <Col span={24} className={transformTypeClassNames[1]}>
-            <FormItem label="SQL" {...itemStyle}>
+            <FormItem label={sparkSqlMsg} {...itemStyle}>
               {getFieldDecorator('sparkSql', {
                 rules: [{
                   required: true,
@@ -243,7 +272,10 @@ export class FlowTransformForm extends React.Component {
                 }],
                 hidden: transformTypeHiddens[1]
               })(
-                <Input type="textarea" placeholder="Spark SQL" autosize={{ minRows: 5, maxRows: 8 }} />
+                <Input
+                  type="textarea"
+                  placeholder="Spark Sql"
+                  autosize={{ minRows: 5, maxRows: 8 }} />
               )}
             </FormItem>
           </Col>

@@ -39,6 +39,7 @@ case class Instance(id: Long,
 
 case class SimpleInstance(desc: Option[String] = None,
                           nsSys: String,
+                          nsInstance: String,
                           connUrl: String) extends SimpleBaseEntity
 
 class InstanceTable(_tableTag: Tag) extends BaseTable[Instance](_tableTag, "instance") {
@@ -51,7 +52,7 @@ class InstanceTable(_tableTag: Tag) extends BaseTable[Instance](_tableTag, "inst
   /** Database column ns_sys SqlType(VARCHAR), Length(30,true) */
   val nsSys: Rep[String] = column[String]("ns_sys", O.Length(30, varying = true))
   /** Database column conn_url SqlType(VARCHAR), Length(1000,true) */
-  val connUrl: Rep[String] = column[String]("conn_url", O.Length(1000, varying = true))
+  val connUrl: Rep[String] = column[String]("conn_url", O.Length(200, varying = true))
 
   /** Uniqueness Index over (nsInstance,nsSys) (database name instance_UNIQUE) */
   val index1 = index("instance_UNIQUE", (nsInstance, nsSys), unique = true)

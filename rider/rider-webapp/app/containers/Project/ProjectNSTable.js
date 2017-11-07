@@ -38,7 +38,18 @@ export class ProjectNSTable extends React.Component {
       searchTextPermission: '',
       filterDropdownVisiblePermission: false,
       searchTextProjectNs: '',
-      filterDropdownVisibleProjectNs: false
+      filterDropdownVisibleProjectNs: false,
+
+      selectedRowKeys: [],
+      selectIcon: 'check',
+      selectText: '分页',
+      paginationOrNot: {
+        defaultPageSize: 10,
+        showSizeChanger: true,
+        onShowSizeChange: (current, pageSize) => {
+          console.log('Current: ', current, '; PageSize: ', pageSize)
+        }
+      }
     }
   }
 
@@ -115,15 +126,35 @@ export class ProjectNSTable extends React.Component {
   }
 
   onChangeAllSelect = () => {
-    this.props.onInitSwitch(this.state.currentNameSpace)
+    const { selectIcon } = this.state
+
+    if (selectIcon === 'close') {
+      this.setState({
+        selectIcon: 'check',
+        selectText: '分页',
+        paginationOrNot: {
+          defaultPageSize: 10,
+          showSizeChanger: true,
+          onShowSizeChange: (current, pageSize) => {
+            console.log('Current: ', current, '; PageSize: ', pageSize)
+          }
+        }
+      })
+    } else if (selectIcon === 'check') {
+      this.setState({
+        selectIcon: 'close',
+        selectText: '全部',
+        paginationOrNot: false
+      })
+    }
   }
 
   onSelectChange = (selectedRowKeys) => {
-    this.props.initSelectedRowKeys(selectedRowKeys)
+    this.setState({ selectedRowKeys })
   }
 
   render () {
-    const { selectedRowKeys } = this.props
+    const { selectedRowKeys } = this.state
     const rowSelection = {
       selectedRowKeys,
       onChange: this.onSelectChange,
@@ -133,14 +164,6 @@ export class ProjectNSTable extends React.Component {
     let { sortedInfo, filteredInfo } = this.state
     sortedInfo = sortedInfo || {}
     filteredInfo = filteredInfo || {}
-
-    const pagination = {
-      defaultPageSize: 10,
-      showSizeChanger: true,
-      onShowSizeChange: (current, pageSize) => {
-        console.log('Current: ', current, '; PageSize: ', pageSize)
-      }
-    }
 
     const columnsProject = [{
       title: 'Namespace',
@@ -157,6 +180,7 @@ export class ProjectNSTable extends React.Component {
       filterDropdown: (
         <div className="custom-filter-dropdown">
           <Input
+            ref={ele => { this.searchInput = ele }}
             placeholder="Namespace"
             value={this.state.searchTextProjectNs}
             onChange={this.onInputChange('searchTextProjectNs')}
@@ -166,7 +190,9 @@ export class ProjectNSTable extends React.Component {
         </div>
       ),
       filterDropdownVisible: this.state.filterDropdownVisibleProjectNs,
-      onFilterDropdownVisibleChange: visible => this.setState({ filterDropdownVisibleProjectNs: visible })
+      onFilterDropdownVisibleChange: visible => this.setState({
+        filterDropdownVisibleProjectNs: visible
+      }, () => this.searchInput.focus())
     }, {
       title: 'Permission',
       dataIndex: 'permission',
@@ -187,19 +213,19 @@ export class ProjectNSTable extends React.Component {
       onFilter: (value, record) => record.permission.includes(value)
     }]
 
-    const { selectIcon, selectType } = this.props
+    const { currentNameSpace, paginationOrNot, selectIcon, selectText } = this.state
 
     return (
       <Table
         bordered
         title={() => (<div className="required-style"><span className="project-ns-h3">Namespace 权限</span>
           <span className="project-ns-switch">
-            <Button icon={selectIcon} type={selectType} onClick={this.onChangeAllSelect} size="small">全选</Button>
+            <Button icon={selectIcon} type="default" onClick={this.onChangeAllSelect} size="small">{selectText}</Button>
           </span>
         </div>)}
         columns={columnsProject}
-        dataSource={this.state.currentNameSpace}
-        pagination={pagination}
+        dataSource={currentNameSpace}
+        pagination={paginationOrNot}
         rowSelection={rowSelection}
         onChange={this.handleChange}
       />
@@ -212,11 +238,6 @@ ProjectNSTable.propTypes = {
   //   React.PropTypes.array,
   //   React.PropTypes.bool
   // ])
-  initSelectedRowKeys: React.PropTypes.func,
-  onInitSwitch: React.PropTypes.func,
-  selectedRowKeys: React.PropTypes.array,
-  selectType: React.PropTypes.string,
-  selectIcon: React.PropTypes.string
 }
 
 export default ProjectNSTable

@@ -25,25 +25,31 @@ import {
   LOAD_DATABASES_SUCCESS,
   ADD_DATABASE,
   ADD_DATABASE_SUCCESS,
+  ADD_DATABASE_ERROR,
   LOAD_SINGLE_DATABASE,
   LOAD_SINGLE_DATABASE_SUCCESS,
   EDIT_DATABASE,
   EDIT_DATABASE_SUCCESS,
+  EDIT_DATABASE_ERROR,
   LOAD_DATABASES_INSTANCE,
   LOAD_DATABASES_INSTANCE_SUCCESS,
   LOAD_NAME_EXIST,
   LOAD_NAME_EXIST_SUCCESS,
+  LOAD_NAME_EXIST_ERROR,
   GET_ERROR
 } from './constants'
 
 const initialState = fromJS({
   databases: false,
   error: false,
-  modalLoading: false
+  modalLoading: false,
+  databaseNameExited: false,
+  dbUrlValue: false
 })
 
 export function databaseReducer (state = initialState, { type, payload }) {
   const databases = state.get('databases')
+
   switch (type) {
     case LOAD_DATABASES:
       return state.set('error', false)
@@ -58,6 +64,9 @@ export function databaseReducer (state = initialState, { type, payload }) {
       return state
         .set('databases', databases.slice())
         .set('modalLoading', false)
+    case ADD_DATABASE_ERROR:
+      payload.reject(payload.result)
+      return state.set('modalLoading', false)
     case LOAD_SINGLE_DATABASE:
       return state.set('error', false)
     case LOAD_SINGLE_DATABASE_SUCCESS:
@@ -73,16 +82,22 @@ export function databaseReducer (state = initialState, { type, payload }) {
       return state
         .set('databases', databases.slice())
         .set('modalLoading', false)
+    case EDIT_DATABASE_ERROR:
+      payload.reject(payload.result)
+      return state.set('modalLoading', false)
     case LOAD_DATABASES_INSTANCE:
       return state
     case LOAD_DATABASES_INSTANCE_SUCCESS:
       payload.resolve(payload.result)
-      return state
+      return state.set('dbUrlValue', payload.result)
     case LOAD_NAME_EXIST:
-      return state
+      return state.set('databaseNameExited', false)
     case LOAD_NAME_EXIST_SUCCESS:
-      payload.resolve(payload.result)
-      return state
+      payload.resolve()
+      return state.set('databaseNameExited', false)
+    case LOAD_NAME_EXIST_ERROR:
+      payload.reject()
+      return state.set('databaseNameExited', true)
     case GET_ERROR:
       return state.set('error', payload.error)
     default:

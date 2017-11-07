@@ -25,6 +25,7 @@ import Helmet from 'react-helmet'
 
 import ProjectForm from './ProjectForm'
 import ProjectNSTable from './ProjectNSTable'
+import ProjectUdfTable from './ProjectUdfTable'
 import ProjectUsersTable from './ProjectUsersTable'
 
 import Row from 'antd/lib/row'
@@ -32,17 +33,19 @@ import Col from 'antd/lib/col'
 import Icon from 'antd/lib/icon'
 import Button from 'antd/lib/button'
 import Modal from 'antd/lib/modal'
+import Popconfirm from 'antd/lib/popconfirm'
 import Tooltip from 'antd/lib/tooltip'
 import message from 'antd/lib/message'
 
 import { selectCurrentProject } from '../App/selectors'
-import { selectProjects, selectModalLoading } from './selectors'
+import { selectProjects, selectModalLoading, selectProjectNameExited } from './selectors'
 import { selectNamespaces } from '../Namespace/selectors'
 import { selectUsers } from '../User/selectors'
 
-import { loadProjects, loadUserProjects, addProject, editProject, loadProjectNameInputValue, loadSingleProject } from './action'
+import { loadProjects, loadUserProjects, addProject, editProject, loadProjectNameInputValue, loadSingleProject, deleteSingleProject } from './action'
 import { loadSelectNamespaces, loadProjectNsAll } from '../Namespace/action'
 import { loadSelectUsers, loadProjectUserAll } from '../User/action'
+import { loadSingleUdf, loadProjectUdfs } from '../Udf/action'
 
 export class Project extends React.Component {
   constructor (props) {
@@ -51,16 +54,12 @@ export class Project extends React.Component {
       formVisible: false,
       projectFormType: 'add',
       projectResult: {},
-      projectNameExited: false,
       projectUserId: '',
       projectNsId: '',
 
-      selectedRowKeys: [],
-      selectType: 'default',
-      selectIcon: 'minus',
-
       projectNsTableDataSource: [],
-      projectUsersTableDataSource: []
+      projectUsersTableDataSource: [],
+      projectUdfTableDataSource: []
     }
   }
 
@@ -82,68 +81,13 @@ export class Project extends React.Component {
    * 新增时，验证 project name 是否存在
    * */
   onInitProjectNameInputValue = (value) => {
-    this.props.onLoadProjectNameInputValue(value, () => {
-      this.setState({
-        projectNameExited: false
-      })
-    }, () => {
+    this.props.onLoadProjectNameInputValue(value, () => {}, () => {
       this.projectForm.setFields({
         name: {
           value: value,
           errors: [new Error('该 Project Name 已存在')]
         }
       })
-      this.setState({
-        projectNameExited: true
-      })
-    })
-  }
-
-  /**
-   *  project namespace table 全选
-   */
-  onInitSwitch = (nsData) => {
-    const { selectType } = this.state
-
-    if (selectType === 'default') {
-      this.setState({
-        selectType: 'primary',
-        selectIcon: 'check'
-      })
-      this.setState({
-        selectedRowKeys: nsData.map(n => n.id)
-      })
-    } else if (selectType === 'primary') {
-      this.setState({
-        selectType: 'default',
-        selectIcon: 'minus'
-      })
-      this.setState({
-        selectedRowKeys: []
-      })
-    }
-  }
-
-  /**
-   * project namespace table selectedRowKeys
-   */
-  initSelectedRowKeys = (selectedRowKeys) => {
-    this.setState({
-      selectedRowKeys: selectedRowKeys
-    }, () => {
-      const { selectedRowKeys, projectNsTableDataSource } = this.state
-
-      if (selectedRowKeys.length === projectNsTableDataSource.length) {
-        this.setState({
-          selectType: 'primary',
-          selectIcon: 'check'
-        })
-      } else {
-        this.setState({
-          selectType: 'default',
-          selectIcon: 'minus'
-        })
-      }
     })
   }
 
@@ -152,7 +96,7 @@ export class Project extends React.Component {
       formVisible: true,
       projectFormType: 'add'
     })
-    // 显示 project modal 所有的 namespaces & users
+    // 显示 project modal 所有的 namespaces & users & udfs
     this.props.onLoadProjectNsAll((result) => {
       this.setState({
         projectNsTableDataSource: result
@@ -161,6 +105,12 @@ export class Project extends React.Component {
     this.props.onLoadProjectUserAll((result) => {
       this.setState({
         projectUsersTableDataSource: result
+      })
+    })
+
+    this.props.onLoadProjectUdfs((result) => {
+      this.setState({
+        projectUdfTableDataSource: result
       })
     })
   }
@@ -196,14 +146,13 @@ export class Project extends React.Component {
             resMemoryG: result.resMemoryG
           })
 
-          // 回显 project modal 所有的 users
+          // 回显 project modal 所有的 users & 选中的 users
           this.props.onLoadProjectUserAll((result) => {
             this.setState({
               projectUsersTableDataSource: result
             })
           })
 
-          // 回显 project modal 选中的 users
           this.props.onLoadSelectUsers(project.id, (selectUsers) => {
             this.projectUsersTable.setState({
               selectedRowKeys: selectUsers.map(n => n.id)
@@ -211,33 +160,29 @@ export class Project extends React.Component {
           })
 
           // 回显 project modal 所有的 namespaces & 选中的 namespaces
-          new Promise((resolve) => {
-            this.props.onLoadProjectNsAll((result) => {
-              resolve(result)
-              this.setState({
-                projectNsTableDataSource: result
-              })
+          this.props.onLoadProjectNsAll((result) => {
+            this.setState({
+              projectNsTableDataSource: result
             })
-          }).then((result) => {
-            this.props.onLoadSelectNamespaces(project.id, (selectNamespaces) => {
-              this.setState({
-                selectedRowKeys: selectNamespaces.map(n => n.id)
-              }, () => {
-                const { selectedRowKeys } = this.state
+          })
 
-                if (selectedRowKeys.length === result.length) {
-                  this.setState({
-                    selectType: 'primary',
-                    selectIcon: 'check'
-                  })
-                } else {
-                  this.setState({
-                    selectType: 'default',
-                    selectIcon: 'minus'
-                  })
-                }
-              })
+          this.props.onLoadSelectNamespaces(project.id, (selectNamespaces) => {
+            this.projectNSTable.setState({
+              selectedRowKeys: selectNamespaces.map(n => n.id)
             })
+          })
+        })
+
+        // 回显 project modal 所有的 udfs & 选中的 udfs
+        this.props.onLoadProjectUdfs((result) => {
+          this.setState({
+            projectUdfTableDataSource: result
+          })
+        })
+
+        this.props.onLoadSingleUdf(project.id, 'adminSelect', (result) => {
+          this.projectUdfTable.setState({
+            selectedRowKeys: result.map(n => n.id)
           })
         })
       })
@@ -245,12 +190,10 @@ export class Project extends React.Component {
 
   hideForm = () => {
     this.setState({
-      formVisible: false,
-      selectType: 'default',
-      selectIcon: 'minus'
+      formVisible: false
     })
     this.projectForm.resetFields()
-    this.setState({
+    this.projectNSTable.setState({
       selectedRowKeys: []
     })
     this.projectUsersTable.setState({
@@ -259,11 +202,16 @@ export class Project extends React.Component {
   }
 
   onModalOk = () => {
-    const { projectFormType, projectNameExited, projectResult } = this.state
+    const { projectFormType, projectResult } = this.state
+    const { projectNameExited } = this.props
 
     const userIds = this.projectUsersTable.state.selectedRowKeys.join(',')
 
-    const { selectedRowKeys } = this.state
+    const udfIds = this.projectUdfTable.state.selectedRowKeys === []
+      ? ''
+      : this.projectUdfTable.state.selectedRowKeys.join(',')
+
+    const { selectedRowKeys } = this.projectNSTable.state
 
     if (selectedRowKeys.length === 0) {
       message.warning('请选择源表！', 3)
@@ -290,6 +238,7 @@ export class Project extends React.Component {
               this.props.onAddProject(Object.assign({}, values, {
                 nsId: namespaceIds,
                 userId: userIds,
+                udfId: udfIds,
                 pic: Math.ceil(Math.random() * 20)
               }), () => {
                 this.hideForm()
@@ -300,7 +249,8 @@ export class Project extends React.Component {
           } else if (projectFormType === 'edit') {
             this.props.onEditProject(Object.assign({}, values, {
               nsId: namespaceIds,
-              userId: userIds
+              userId: userIds,
+              udfId: udfIds
             }, projectResult), () => {
               this.hideForm()
             }, () => {
@@ -343,6 +293,17 @@ export class Project extends React.Component {
       })
   }
 
+  // 阻止事件的传播，避免点击后进入项目内
+  deletePro = (e) => {
+    e.stopPropagation()
+  }
+
+  deleteAdminProject = (p) => (e) => {
+    this.props.onDeleteSingleProject(p.id, () => {}, (result) => {
+      message.warning(`不能删除：${result}`, 5)
+    })
+  }
+
   render () {
     const { projects } = this.props
 
@@ -368,10 +329,15 @@ export class Project extends React.Component {
         if (localStorage.getItem('loginRoleType') === 'admin') {
           projectAction = (
             <div className="ri-project-item-tools">
-              <Tooltip title="修改">
+              <Tooltip title="修改 & 授权">
                 <Button icon="edit" shape="circle" type="ghost" onClick={this.showDetail(p)} />
               </Tooltip>
               {showOrHideBtn}
+              <Popconfirm placement="bottom" title="确定删除吗？" okText="Yes" cancelText="No" onConfirm={this.deleteAdminProject(p)}>
+                <Tooltip title="删除" onClick={this.deletePro}>
+                  <Button icon="delete" shape="circle" type="ghost"></Button>
+                </Tooltip>
+              </Popconfirm>
             </div>
           )
         } else if (localStorage.getItem('loginRoleType') === 'user') {
@@ -442,7 +408,7 @@ export class Project extends React.Component {
       )
       : projectLoading
 
-    const { projectFormType, formVisible, projectNsTableDataSource, projectUsersTableDataSource } = this.state
+    const { projectFormType, formVisible, projectNsTableDataSource, projectUsersTableDataSource, projectUdfTableDataSource } = this.state
 
     return (
       <div>
@@ -451,7 +417,7 @@ export class Project extends React.Component {
           {projectContent}
         </div>
         <Modal
-          title={`${projectFormType === 'add' ? '新建' : '修改'}项目`}
+          title={`${projectFormType === 'add' ? '新建' : '修改'} & 授权`}
           okText="保存"
           wrapClassName="ant-modal-small ant-modal-xlarge project-modal"
           visible={formVisible}
@@ -476,25 +442,32 @@ export class Project extends React.Component {
             </Button>
           ]}
         >
-          <ProjectForm
-            projectFormType={projectFormType}
-            onInitProjectNameInputValue={this.onInitProjectNameInputValue}
-            ref={(f) => { this.projectForm = f }}
-          />
           <Row className="project-table-style">
             <div className="ant-col-11">
+              <ProjectForm
+                projectFormType={projectFormType}
+                onInitProjectNameInputValue={this.onInitProjectNameInputValue}
+                ref={(f) => { this.projectForm = f }}
+              />
+            </div>
+            <div className="ant-col-1"></div>
+            <div className="ant-col-11 pro-table-class">
+              <ProjectUdfTable
+                dataUdf={projectUdfTableDataSource}
+                ref={(f) => { this.projectUdfTable = f }}
+              />
+            </div>
+          </Row>
+
+          <Row className="project-table-style">
+            <div className="ant-col-11 pro-table-class">
               <ProjectNSTable
                 dataNameSpace={projectNsTableDataSource}
-                initSelectedRowKeys={this.initSelectedRowKeys}
-                onInitSwitch={this.onInitSwitch}
-                selectedRowKeys={this.state.selectedRowKeys}
-                selectType={this.state.selectType}
-                selectIcon={this.state.selectIcon}
                 ref={(f) => { this.projectNSTable = f }}
               />
             </div>
             <div className="ant-col-1"></div>
-            <div className="ant-col-11">
+            <div className="ant-col-11 pro-table-class">
               <ProjectUsersTable
                 dataUsers={projectUsersTableDataSource}
                 ref={(f) => { this.projectUsersTable = f }}
@@ -514,17 +487,21 @@ Project.propTypes = {
     React.PropTypes.bool
   ]),
   modalLoading: React.PropTypes.bool,
+  projectNameExited: React.PropTypes.bool,
   onLoadProjects: React.PropTypes.func,
   onLoadUserProjects: React.PropTypes.func,
   onLoadSingleProject: React.PropTypes.func,
   onLoadSelectNamespaces: React.PropTypes.func,
   onLoadSelectUsers: React.PropTypes.func,
+  onLoadSingleUdf: React.PropTypes.func,
   onAddProject: React.PropTypes.func,
   onEditProject: React.PropTypes.func,
   onLoadProjectNameInputValue: React.PropTypes.func,
+  onDeleteSingleProject: React.PropTypes.func,
 
   onLoadProjectNsAll: React.PropTypes.func,
-  onLoadProjectUserAll: React.PropTypes.func
+  onLoadProjectUserAll: React.PropTypes.func,
+  onLoadProjectUdfs: React.PropTypes.func
 }
 
 export function mapDispatchToProps (dispatch) {
@@ -534,12 +511,15 @@ export function mapDispatchToProps (dispatch) {
     onLoadSingleProject: (id, resolve) => dispatch(loadSingleProject(id, resolve)),
     onLoadSelectNamespaces: (projectId, resolve) => dispatch(loadSelectNamespaces(projectId, resolve)),
     onLoadSelectUsers: (projectId, resolve) => dispatch(loadSelectUsers(projectId, resolve)),
+    onLoadSingleUdf: (projectId, roleType, resolve) => dispatch(loadSingleUdf(projectId, roleType, resolve)),
     onAddProject: (project, resolve, final) => dispatch(addProject(project, resolve, final)),
     onEditProject: (project, resolve, final) => dispatch(editProject(project, resolve, final)),
     onLoadProjectNameInputValue: (value, resolve, reject) => dispatch(loadProjectNameInputValue(value, resolve, reject)),
+    onDeleteSingleProject: (projectId, resolve, reject) => dispatch(deleteSingleProject(projectId, resolve, reject)),
 
     onLoadProjectNsAll: (resolve) => dispatch(loadProjectNsAll(resolve)),
-    onLoadProjectUserAll: (resolve) => dispatch(loadProjectUserAll(resolve))
+    onLoadProjectUserAll: (resolve) => dispatch(loadProjectUserAll(resolve)),
+    onLoadProjectUdfs: (resolve) => dispatch(loadProjectUdfs(resolve))
   }
 }
 
@@ -547,6 +527,7 @@ const mapStateToProps = createStructuredSelector({
   currentProject: selectCurrentProject(),
   projects: selectProjects(),
   modalLoading: selectModalLoading(),
+  projectNameExited: selectProjectNameExited(),
   namespaces: selectNamespaces(),
   users: selectUsers()
 })

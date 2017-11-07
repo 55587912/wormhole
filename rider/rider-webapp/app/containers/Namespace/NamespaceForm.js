@@ -27,6 +27,8 @@ import Col from 'antd/lib/col'
 import Table from 'antd/lib/table'
 import Input from 'antd/lib/input'
 import Tooltip from 'antd/lib/tooltip'
+import Popover from 'antd/lib/popover'
+import Icon from 'antd/lib/icon'
 import Button from 'antd/lib/button'
 import Popconfirm from 'antd/lib/popconfirm'
 const FormItem = Form.Item
@@ -38,7 +40,16 @@ export class NamespaceForm extends React.Component {
     super(props)
     this.state = {
       namespaceDSValue: '',
-      instanceIdGeted: 0
+      instanceIdGeted: 0,
+      currentNamespaceUrlValue: []
+    }
+  }
+
+  componentWillReceiveProps (props) {
+    if (props.namespaceUrlValue) {
+      this.setState({
+        currentNamespaceUrlValue: props.namespaceUrlValue
+      })
     }
   }
 
@@ -52,17 +63,17 @@ export class NamespaceForm extends React.Component {
     }
   }
 
-  // 选择不同的 connection url 显示不同的 instance
-  onHandleChangeUrl = (e) => {
-    const selUrl = this.props.namespaceUrlValue.find(s => s.id === Number(e))
+  // 选择 instance 显示不同的 connection url
+  onHandleChangeInstance = (e) => {
+    const selUrl = this.state.currentNamespaceUrlValue.find(s => s.id === Number(e))
     this.props.form.setFieldsValue({
-      instance: selUrl.nsInstance
+      connectionUrl: selUrl.connUrl
     })
     this.props.cleanNsTableData()
     this.setState({
       instanceIdGeted: selUrl.id
     }, () => {
-      // 通过 instance id 显示 database 下拉框内容
+      // 通过 instance id 显示 database 下拉框
       this.props.onInitDatabaseSelectValue(this.state.instanceIdGeted)
     })
   }
@@ -75,9 +86,14 @@ export class NamespaceForm extends React.Component {
     this.props.onInitNsNameInputValue(e.target.value)
   }
 
+  onHandleNsKey = (e) => {
+    this.props.onInitNsKeyInputValue(e.target.value)
+  }
+
   render () {
     const { getFieldDecorator } = this.props.form
-    const { namespaceFormType, namespaceUrlValue, databaseSelectValue } = this.props
+    const { currentNamespaceUrlValue, namespaceDSValue } = this.state
+    const { namespaceFormType, databaseSelectValue } = this.props
     const { namespaceTableSource, onDeleteTable, onAddTable, deleteTableClass, addTableClass, addTableClassTable, addBtnDisabled } = this.props
 
     const itemStyle = {
@@ -86,14 +102,16 @@ export class NamespaceForm extends React.Component {
     }
 
     const DBDataSystemData = [
+      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} },
       { value: 'oracle', icon: 'icon-amy-db-oracle', style: {lineHeight: '40px'} },
       { value: 'mysql', icon: 'icon-mysql' },
       { value: 'es', icon: 'icon-elastic', style: {fontSize: '24px'} },
       { value: 'hbase', icon: 'icon-hbase1' },
       { value: 'phoenix', text: 'Phoenix' },
       { value: 'cassandra', icon: 'icon-cass', style: {fontSize: '52px', lineHeight: '60px'} },
-      { value: 'log', text: 'Log' },
-      { value: 'kafka', icon: 'icon-kafka', style: {fontSize: '35px'} }
+      // { value: 'log', text: 'Log' },
+      { value: 'postgresql', icon: 'icon-postgresql', style: {fontSize: '31px'} },
+      { value: 'mongodb', icon: 'icon-mongodb', style: {fontSize: '26px'} }
     ]
 
     // edit 时，不能修改部分元素
@@ -104,18 +122,51 @@ export class NamespaceForm extends React.Component {
       disabledOrNot = true
     }
 
-    const urlOptions = namespaceUrlValue.map(s => (<Option key={s.id} value={`${s.id}`}>{s.connUrl}</Option>))
+    const instanceOptions = currentNamespaceUrlValue.map(s => (<Option key={s.id} value={`${s.id}`}>{s.nsInstance}</Option>))
     const databaseOptions = databaseSelectValue.map((s) => (<Option key={s.id} value={`${s.id}`}>{`${s.nsDatabase} (${s.permission})`}</Option>))
 
-    // const databaseOptions = databaseSelectValue.map((s, index) => {
-    //   let test = ''
-    //   if (databaseSelectValue[index].nsDatabase === databaseSelectValue[index + 1].nsDatabase) {
-    //     test = (<Option key={s.id} value={`${s.id}`}>{`${s.nsDatabase}（${s.permission}）`}</Option>)
-    //   } else {
-    //     test = (<Option key={s.id} value={`${s.id}`}>{`${s.nsDatabase}`}</Option>)
-    //   }
-    //   return test
-    // })
+    let namespaceDBLabel = ''
+    let namespaceDBPlace = ''
+    if (namespaceDSValue === 'es') {
+      namespaceDBLabel = 'Index'
+      namespaceDBPlace = 'select an Index'
+    } else if (namespaceDSValue === 'hbase') {
+      namespaceDBLabel = 'Namespace'
+      namespaceDBPlace = 'select a Hbase Namespace'
+    } else if (namespaceDSValue === 'kafka') {
+      namespaceDBLabel = 'Topic'
+      namespaceDBPlace = 'select a Topic'
+    } else {
+      namespaceDBLabel = 'Database'
+      namespaceDBPlace = 'select a Database'
+    }
+
+    const namespaceTableLabel = namespaceDSValue === 'es' ? 'Types' : 'Tables'
+    const namespaceTablePlace = namespaceDSValue === 'es' ? 'Type' : 'Table'
+    const disabledKeyOrNot = namespaceDSValue === 'hbase'
+    const namespaceKeyPlaceholder = namespaceDSValue === 'kafka' ? '多个数据主键用逗号隔开' : '多个业务主键用逗号隔开'
+
+    const questionOrNot = namespaceDSValue === 'kafka'
+      ? (
+        <Tooltip title="帮助">
+          <Popover
+            placement="top"
+            content={<div style={{ width: '400px', height: '38px' }}>
+              <p>Kafka 时，Table 为 ums schema.namespace 中的第四层，如: ums schema.namespace 为 kafka.test.test1.test2.*.*.*， table 为 test2</p>
+            </div>}
+            title={<h3>帮助</h3>}
+            trigger="click">
+            <Icon type="question-circle-o" className="question-class" />
+          </Popover>
+        </Tooltip>)
+      : ''
+
+    const namespaceTableMsg = (
+      <span>
+        {namespaceTableLabel}
+        {questionOrNot}
+      </span>
+    )
 
     const columns = [{
       title: 'Table',
@@ -187,25 +238,6 @@ export class NamespaceForm extends React.Component {
               )}
             </FormItem>
           </Col>
-          <Col span={24}>
-            <FormItem label="Connection URL" {...itemStyle}>
-              {getFieldDecorator('connectionUrl', {
-                rules: [{
-                  required: true,
-                  message: '请选择 Connection URL'
-                }]
-              })(
-                <Select
-                  dropdownClassName="ri-workbench-select-dropdown db-workbench-select-dropdown"
-                  onChange={this.onHandleChangeUrl}
-                  placeholder="Select a Connection URL"
-                  disabled={disabledOrNot}
-                >
-                  {urlOptions}
-                </Select>
-              )}
-            </FormItem>
-          </Col>
 
           <Col span={24}>
             <FormItem label="Instance" {...itemStyle}>
@@ -215,22 +247,43 @@ export class NamespaceForm extends React.Component {
                   message: '请填写 Instance'
                 }]
               })(
-                <Input placeholder="Instance" disabled />
+                <Select
+                  dropdownClassName="ri-workbench-select-dropdown db-workbench-select-dropdown"
+                  onChange={this.onHandleChangeInstance}
+                  placeholder="Select an Instance"
+                  disabled={disabledOrNot}
+                >
+                  {instanceOptions}
+                </Select>
               )}
             </FormItem>
           </Col>
+
           <Col span={24}>
-            <FormItem label="Database" {...itemStyle}>
+            <FormItem label="Connection URL" {...itemStyle}>
+              {getFieldDecorator('connectionUrl', {
+                rules: [{
+                  required: true,
+                  message: '请选择 Connection URL'
+                }]
+              })(
+                <Input placeholder="Connection URL" disabled />
+              )}
+            </FormItem>
+          </Col>
+
+          <Col span={24}>
+            <FormItem label={namespaceDBLabel} {...itemStyle}>
               {getFieldDecorator('nsDatabase', {
                 rules: [{
                   required: true,
-                  message: '请选择 Database'
+                  message: `请选择 ${namespaceDBLabel}`
                 }]
               })(
                 <Select
                   dropdownClassName="ri-workbench-select-dropdown db-workbench-select-dropdown"
                   onChange={this.onHandleChangeDatabase}
-                  placeholder="Select a Database"
+                  placeholder={namespaceDBPlace}
                   disabled={disabledOrNot}
                 >
                   {databaseOptions}
@@ -241,7 +294,7 @@ export class NamespaceForm extends React.Component {
 
           <span>
             <Col span={6} className="ns-add-table-label-class">
-              <FormItem label="Tables" style={{ marginRight: '-2px' }}>
+              <FormItem label={namespaceTableMsg} style={{ marginRight: '-2px' }}>
                 {getFieldDecorator('nsTables', {
                   // rules: [{
                   //   required: true,
@@ -257,7 +310,7 @@ export class NamespaceForm extends React.Component {
               <FormItem label="" style={{ marginLeft: '2px' }}>
                 {getFieldDecorator('nsSingleTableName', {})(
                   <Input
-                    placeholder="Table"
+                    placeholder={namespaceTablePlace}
                     onChange={this.onHandleNsTableName}
                     disabled={disabledOrNot}
                   />
@@ -267,7 +320,11 @@ export class NamespaceForm extends React.Component {
             <Col span={7}>
               <FormItem label="">
                 {getFieldDecorator('nsSingleKeyValue', {})(
-                  <Input placeholder="Key" />
+                  <Input
+                    placeholder={namespaceKeyPlaceholder}
+                    onChange={this.onHandleNsKey}
+                    disabled={disabledKeyOrNot}
+                  />
                 )}
               </FormItem>
             </Col>
@@ -287,7 +344,7 @@ export class NamespaceForm extends React.Component {
               className={`${addTableClassTable} ns-add-table`}
               dataSource={namespaceTableSource}
               columns={columns}
-              showHeader={false}
+              // showHeader={false}
               pagination={pagination}
               bordered
             />
@@ -301,7 +358,6 @@ export class NamespaceForm extends React.Component {
 NamespaceForm.propTypes = {
   form: React.PropTypes.any,
   namespaceFormType: React.PropTypes.string,
-  namespaceUrlValue: React.PropTypes.array,
   namespaceTableSource: React.PropTypes.array,
   databaseSelectValue: React.PropTypes.array,
   deleteTableClass: React.PropTypes.string,
@@ -313,7 +369,8 @@ NamespaceForm.propTypes = {
   onDeleteTable: React.PropTypes.func,
   onAddTable: React.PropTypes.func,
   cleanNsTableData: React.PropTypes.func,
-  onInitNsNameInputValue: React.PropTypes.func
+  onInitNsNameInputValue: React.PropTypes.func,
+  onInitNsKeyInputValue: React.PropTypes.func
 }
 
 export default Form.create({wrappedComponentRef: true})(NamespaceForm)

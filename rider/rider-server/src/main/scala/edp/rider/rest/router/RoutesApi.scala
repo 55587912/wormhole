@@ -30,8 +30,9 @@ import edp.rider.rest.util.CrossDomainSupport._
 
 class RoutesApi(modules: ConfigurationModule with PersistenceModule with BusinessModule with RoutesModuleImpl) extends Directives {
 
-//  lazy val swagger = new SwaggerRoutes
+  lazy val swagger = new SwaggerRoutes
   lazy val login = new LoginRoutes(modules)
+  lazy val genToken = new GenTokenRoutes(modules)
   lazy val changePwd = new ChangePwdRoutes(modules)
   lazy val instanceAdmin = new InstanceAdminRoutes(modules)
   lazy val databaseAdmin = new NsDatabaseAdminRoutes(modules)
@@ -40,7 +41,8 @@ class RoutesApi(modules: ConfigurationModule with PersistenceModule with Busines
   lazy val flowAdmin = new FlowAdminRoutes(modules)
   lazy val userAdmin = new UserAdminRoutes(modules)
   lazy val projectAdmin = new ProjectAdminRoutes(modules)
-//  lazy val riderInfoAdmin = new RiderInfoAdminRoutes(modules)
+  lazy val riderInfoAdmin = new RiderInfoAdminRoutes(modules)
+  lazy val udfAdmin = new UdfAdminRoutes(modules)
   lazy val riderUI = new RiderRoutes
 
   lazy val projectUser = new ProjectUserRoutes(modules)
@@ -49,17 +51,21 @@ class RoutesApi(modules: ConfigurationModule with PersistenceModule with Busines
   lazy val flowUser = new FlowUserRoutes(modules)
   lazy val actionUser = new ActionUserRoutes(modules)
   lazy val databaseUser = new NsDatabaseUserRoutes(modules)
+  lazy val jobUser = new JobUserRoutes(modules)
+  lazy val instanceUser = new InstanceUserRoutes(modules)
+  lazy val udfUser = new UdfUserRoutes(modules)
 
   lazy val flowApp = new FlowAppRoutes(modules)
   lazy val jobApp = new JobAppRoutes(modules)
 
   lazy val routes: Route =
-//    crossDomainHandler(swagger.indexRoute) ~
-//      crossDomainHandler(swagger.routes) ~
+    crossDomainHandler(swagger.indexRoute) ~
+      crossDomainHandler(swagger.routes) ~
       crossDomainHandler(riderUI.indexRoute) ~
       pathPrefix("api" / "v1") {
         crossDomainHandler(login.routes) ~
           crossDomainHandler(changePwd.routes) ~
+          crossDomainHandler(genToken.routes) ~
           pathPrefix("admin") {
             crossDomainHandler(instanceAdmin.routes) ~
               crossDomainHandler(databaseAdmin.routes) ~
@@ -67,8 +73,9 @@ class RoutesApi(modules: ConfigurationModule with PersistenceModule with Busines
               crossDomainHandler(streamAdmin.routes) ~
               crossDomainHandler(flowAdmin.routes) ~
               crossDomainHandler(userAdmin.routes) ~
-              crossDomainHandler(projectAdmin.routes)
-//              crossDomainHandler(riderInfoAdmin.routes)
+              crossDomainHandler(projectAdmin.routes) ~
+              crossDomainHandler(riderInfoAdmin.routes) ~
+              crossDomainHandler(udfAdmin.routes)
           } ~
           pathPrefix("user") {
             crossDomainHandler(projectUser.routes) ~
@@ -76,7 +83,10 @@ class RoutesApi(modules: ConfigurationModule with PersistenceModule with Busines
               crossDomainHandler(streamUser.routes) ~
               crossDomainHandler(flowUser.routes) ~
               crossDomainHandler(actionUser.routes) ~
-              crossDomainHandler(databaseUser.routes)
+              crossDomainHandler(databaseUser.routes) ~
+              crossDomainHandler(instanceUser.routes) ~
+              crossDomainHandler(udfUser.routes) ~
+              crossDomainHandler(jobUser.routes)
           } ~
           pathPrefix("app") {
             crossDomainHandler(flowApp.routes) ~
